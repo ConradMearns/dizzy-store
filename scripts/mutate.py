@@ -341,6 +341,9 @@ m("idle: a surprise ends the watch", DM, "        except Exception:             
 m("idle: the device does not speed up", DM, "        daemon.fast = 1.0", "        daemon.fast = None", IDLE)
 m("idle: the verdict is not the exit status", DM, "        return daemon.idle_result[0]\n", "        return 0\n", IDLE)
 m("idle: --eject runs after a run that did not finish", CL, "    if args.eject and code == 0:", "    if args.eject:", IDLE)
+JOIN = ["tests/test_join.py"]
+m("join: a store of another cluster is re-labelled", CL, "    if mine and mine != theirs:", "    if False:", JOIN)
+m("join: rejoining your own cluster is refused", CL, "    if mine and mine != theirs:", "    if mine:", JOIN)
 m("service: a virtualenv executable is not called out", SV, '    if ".venv" in parts or "venv" in parts:', '    if False:')
 m("service: install does not show the warning", CL, '    warning = service.exe_warning(exe)\n    if warning:\n        print(warning, file=sys.stderr)', '    pass')
 m("idle: --eject is not checked up front", CL, "        if run_eject(root, None, dry_run=True, power_off=False, say=why.append) != 0:", "        if False:", IDLE)

@@ -163,7 +163,13 @@ def cmd_join(args, root: Path) -> int:
     if not info.get("cluster_id"):
         print("that device has not founded a cluster yet", file=sys.stderr)
         return 1
-    device.data["cluster_id"] = info["cluster_id"]
+    theirs, mine = info["cluster_id"], device["cluster_id"]
+    if mine and mine != theirs:
+        raise ConfigError(
+            f"this store already belongs to cluster {mine!r}, and {info['node_id']} is in cluster {theirs!r} — "
+            "joining would merge their event logs, and a merged log cannot be pulled apart again. A store belongs "
+            f"to one cluster for life: to be part of {theirs!r}, make a new store with `init` and join that.")
+    device.data["cluster_id"] = theirs
     device.data["peer_token"] = token
     device.remember_seed(info["node_id"], args.url.rstrip("/"))      # a route that is true on THIS computer
     device.save()

@@ -68,6 +68,16 @@ fetched back from a peer if evicted here) · `cmd NAME key=value…` · `query N
 (`ssh -L`/`-R`); a card's endpoints are plain URLs. v0 authenticates peers with a shared bearer token;
 the admin API has its own, local-only token.
 
+### Several stores on one machine
+
+A store is a root folder with its own event log and its own cluster, and a machine can run as many as you like
+side by side — each its own device in the config (`devices:`), with its own `listen` port and its own
+`systemctl --user enable dizzy-store@NAME`. Stores in different clusters never sync: give them different peer
+tokens (the default) and a readable name with `found --cluster-id NAME`. `join` refuses a store that already
+belongs to a cluster, so a slip cannot merge two logs. The number of stores is the number of *owners* whose data
+must stay apart, not the number of disks: a root only has to sit on one filesystem (a pooled volume is one root),
+and the event log is a small file inside it.
+
 ### Under systemd (your user, no root)
 
 ```sh
