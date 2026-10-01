@@ -1,0 +1,72 @@
+id: https://example.org/models/pool
+name: pool
+description: 'The pool as the replicated logs say it is. Classes: nodes (node_id, cluster_id, epoch, role, site, location_note, endpoints, wants, draining, announced_at); collection_policies (collection, min_sites, verify_max_age_days, evictable); blobs (blob_hash, byte_size, collection, first_seen_at — all from the earliest registration — and for chunked files chunk_size + ordered chunk_hashes, from the earliest recipe; what EXISTS, whoever holds it); blob_locations ((blob_hash, node_id, epoch): state ''present'' | ''evicted'' | ''corrupt'', pinned, stored_at, last_access_at — one row per LIFE of a node, and only rows under the node''s current epoch count, so a wiped device''s old claims never need cleaning up); scrub_state ((node_id, collection, epoch): cursor, pass_started_at, last_full_pass_at); peer_links ((node_id, peer_id): healthy, changed_at). One schema, so a query can join locations with policy, scrub state and nodes.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  Node:
+    description: 'One row per node_id: its latest public card (latest occurred_at wins).'
+    attributes:
+      node_id: {range: string, required: true, identifier: true}
+      cluster_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      role: {range: string, required: true}
+      site: {range: string, required: true}
+      location_note: {range: string, required: false}
+      endpoints_json: {range: string, required: false, description: JSON list}
+      wants_json: {range: string, required: false, description: JSON list}
+      draining: {range: boolean, required: true}
+      announced_at: {range: datetime, required: true}
+      digest: {range: string, required: true, description: payload digest — the last-writer-wins tie-break}
+  CollectionPolicy:
+    description: 'One row per collection: the latest declared policy.'
+    attributes:
+      collection: {range: string, required: true, identifier: true}
+      min_sites: {range: integer, required: true}
+      verify_max_age_days: {range: integer, required: true}
+      evictable: {range: boolean, required: true}
+      declared_at: {range: datetime, required: true}
+      digest: {range: string, required: true}
+  Blob:
+    description: One row per registered blob — what EXISTS, whoever holds it.
+    attributes:
+      blob_hash: {range: string, required: true, identifier: true}
+      byte_size: {range: integer, required: true}
+      collection: {range: string, required: true}
+      first_seen_at: {range: datetime, required: true}
+      digest: {range: string, required: true, description: payload digest of the earliest registration — the tie-break}
+      chunk_size: {range: integer, required: false}
+      chunk_hashes_json: {range: string, required: false, description: JSON list; large files only}
+      chunk_at: {range: datetime, required: false, description: when the earliest recipe was registered}
+      chunk_digest: {range: string, required: false, description: payload digest of the earliest recipe}
+  BlobLocation:
+    description: 'One row per (blob, node, epoch): a node''s claim to hold a blob in one life of it.'
+    attributes:
+      id: {range: string, required: true, identifier: true, description: node_id|epoch|blob_hash}
+      blob_hash: {range: string, required: true}
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      state: {range: string, required: true, description: '''present'' | ''evicted'' | ''corrupt'''}
+      pinned: {range: boolean, required: true}
+      stored_at: {range: datetime, required: false}
+      last_access_at: {range: datetime, required: false}
+  ScrubState:
+    description: 'One row per (node, epoch, collection): where scrub resumes, and the last full pass.'
+    attributes:
+      id: {range: string, required: true, identifier: true, description: node_id|epoch|collection ('' = all)}
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      collection: {range: string, required: true}
+      cursor: {range: string, required: false}
+      pass_started_at: {range: datetime, required: false}
+      last_full_pass_at: {range: datetime, required: false}
+  PeerLink:
+    description: 'One row per (node, peer): the link state as that node last recorded it.'
+    attributes:
+      id: {range: string, required: true, identifier: true, description: node_id|peer_id}
+      node_id: {range: string, required: true}
+      peer_id: {range: string, required: true}
+      healthy: {range: boolean, required: true}
+      changed_at: {range: datetime, required: true}
+      digest: {range: string, required: true}

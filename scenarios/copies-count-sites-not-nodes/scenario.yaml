@@ -1,0 +1,28 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+    nas:    {role: archive, site: home, wants: ['*']}     # same house as the laptop
+    cabin:  {role: archive, site: cabin, wants: ['*']}
+- {at: server, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- {net: {offline: cabin}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+
+# server + laptop + nas = three devices but only TWO sites — enough to be safe...
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: empty}
+# ...but not enough to let the server leave: laptop and nas are one fire, one site
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+
+- {net: {online: cabin}}
+- sync: all
+- claim:
+    at: server
+    query: get_eviction_candidates
+    input: {node_id: server}
+    expect: {contains: [{blob_hashes: $photo-1}]}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: false}

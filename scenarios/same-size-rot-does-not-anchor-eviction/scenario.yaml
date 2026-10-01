@@ -1,0 +1,7 @@
+- cluster: {server: {role: hot, site: hetzner, wants: []}, laptop: {role: archive, site: home, wants: ['*']}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- fault: {at: laptop, corrupt: $photo-1}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}

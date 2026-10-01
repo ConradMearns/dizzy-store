@@ -1,0 +1,21 @@
+id: https://example.org/queries/get_at_risk_blobs
+name: get_at_risk_blobs
+description: 'Registered blobs held by fewer distinct sites than their collection''s min_sites (input: limit, optional collection): blob_hash, byte_size, collection, first_seen_at, sites_holding, sites_needed. A copy counts when ''present'', on a non-draining node, and fresh — stored, or its node''s last_full_pass_at, within verify_max_age_days. sites_holding = 0 is LOSS. The first cut of the safety measure; surfaced in the UI.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetAtRiskBlobsInput:
+    description: Input for get_at_risk_blobs
+    attributes:
+      limit: {range: integer, required: false}
+      collection: {range: string, required: false}
+  GetAtRiskBlobsOutput:
+    description: Output for get_at_risk_blobs
+    attributes:
+      blob_hashes: {range: string, required: false, multivalued: true}
+      byte_sizes: {range: integer, required: false, multivalued: true}
+      collections: {range: string, required: false, multivalued: true}
+      first_seen_ats: {range: string, required: false, multivalued: true, description: ISO 8601}
+      sites_holding: {range: integer, required: false, multivalued: true}
+      sites_needed: {range: integer, required: false, multivalued: true}

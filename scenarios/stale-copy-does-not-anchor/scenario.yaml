@@ -1,0 +1,13 @@
+- cluster: {server: {role: hot, site: hetzner, wants: []}, laptop: {role: archive, site: home, wants: ['*']}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- advance: 31d
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: empty}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+- {at: laptop, command: scrub_blobs, fields: {max_bytes: 1MB}}
+- {at: server, command: scrub_blobs, fields: {max_bytes: 1MB}}
+- sync: all
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: false}

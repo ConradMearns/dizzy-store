@@ -1,0 +1,12 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], disk_capacity: 30KB, disk_other: 10KB, min_free_bytes: 8KB}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: "photo-{n}", count: 7, size: 2KB}     # 14 KB: 6 KB free — under the 8 KB floor
+- sync: all
+# no capacity check has run, and by the time anyone looks, the news is stale: it is the paced
+# sweep, reading the same two numbers, that notices and relieves it
+- {advance: 2h}
+- sweep: server
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 5}}}
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

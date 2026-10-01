@@ -1,0 +1,20 @@
+id: https://example.org/queries/get_blobs_held
+name: get_blobs_held
+description: 'A node''s ''present'' locations in hash order, continuing from its saved scrub cursor (input: node_id, optional collection, limit) — the stable iteration scrub resumes over — with the pass_started_at of the pass in progress.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetBlobsHeldInput:
+    description: Input for get_blobs_held
+    attributes:
+      node_id: {range: string, required: true}
+      collection: {range: string, required: false}
+      limit: {range: integer, required: false}
+  GetBlobsHeldOutput:
+    description: Output for get_blobs_held
+    attributes:
+      blob_hashes: {range: string, required: false, multivalued: true}
+      byte_sizes: {range: integer, required: false, multivalued: true}
+      collections: {range: string, required: false, multivalued: true}
+      pass_started_at: {range: string, required: false, description: ISO 8601; empty when no pass is in progress}

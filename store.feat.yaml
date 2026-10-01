@@ -1,0 +1,743 @@
+description: >-
+  A personal cloud storage replicator (working title: dizzy-store). Nodes — the
+  public server, a laptop, a home server, external drives in boxes — together
+  hold a pool of immutable, content-addressed BLOBS, so no box has to fit
+  everything: hot nodes keep what is recent and likely to be read, archive and
+  cold nodes keep the rest, and any node fetches what it lacks from a peer.
+  Consumers see only a blob API (put / get / has / stat / pin) and never learn
+  that nodes exist. It is a DUMB content-addressed store: a blob is a hash, a
+  size and a collection. Names, MIME types and every other kind of metadata
+  belong to the consumer.
+
+
+  PRINCIPLES
+
+  1. An executable, not a service. The same tool runs under systemd on the
+  server and laptop, or by hand: a drive carries the tool and its own state
+  (<root>/.store/ — identity, epoch, log). What a device IS travels with its
+  data; how a MACHINE finds and runs it — where the root is, which address to
+  listen on, whom to dial, how often to tick — is the host's layered
+  configuration, never the drive's. Plug in, cd in, run until idle, unplug.
+
+  2. Two scopes of fact, no leader. A DEVICE records itself — what it holds,
+  evicted, pinned, scrubbed, which links are up — single-writer, and carried
+  with the device. The CLUSTER records itself — that it exists, who its nodes
+  are, which blobs exist, each collection's policy — authored by whichever
+  device the human acted from. There is no leader: every device carries every
+  fact (principle 3), so any one survivor can reconstitute the cluster. Nodes
+  never command each other: they publish facts and peers' policies react. A registered blob that no live device holds
+  is loss, and is visible (get_at_risk_blobs).
+
+  3. Replication is the event store's anti-entropy — a content-addressed DAG.
+  sync_peer reconciles the two logs' event-id sets (bucket digests first, then
+  only the buckets that differ), pulls the missing events in batches
+  (hash-verified, parents first by host/replicate.py), folds the new events
+  through the same projections, and hands them to policies (react-on-replicate). Identity is the
+  content hash, so nothing is ever overwritten, redelivery is harmless, and
+  third-party events relay by construction: if A reaches B and B reaches C,
+  C's facts reach A, and they outlive a dead device. Ancestry must be
+  complete, so EVERY device carries the full log — cheap, since events are tiny
+  next to blobs — and any one survivor, a drive in a box included, can
+  reconstitute the cluster. Rows converge by construction: blob_locations,
+  nodes, peer_links and scrub_state each have a single writer (a device's own
+  chain); the multi-writer facts resolve deterministically — collection policy
+  and node announcements by last-writer-wins on occurred_at (ties: a stable
+  digest of the event's payload). A device never issues such a fact with an
+  occurred_at that is not strictly after its OWN previous one for the same
+  subject — so its later word always beats its earlier, whatever the clock's
+  resolution or a step backwards,
+  the blob catalog by first in canonical order. Events may arrive out of order
+  across devices; projections upsert.
+
+  4. Epoch. A device has a random epoch — an id for this LIFE of the device,
+  generated when its state is created, announced in node_announced and carried
+  by every event that describes what it holds. A wiped disk returns with a new
+  one, so its old claims (still in the log, as history) belong to an epoch that
+  is no longer current and stop counting. Rows are keyed per epoch, so lives
+  never interfere, in any arrival order. A new life PULLS the log before it
+  announces, so its announcement can be stamped strictly after the old life's.
+
+  5. Bytes are pulled by the receiver and verified. A blob is recorded as
+  stored only when its sha256 matches its address; a mismatch is a failure,
+  never a silent store. Blobs are immutable, so a copy cannot go stale — only
+  placement and integrity matter.
+
+  6. Large files are chunked in TRANSIT, not in the log. The edge splits a big
+  file into ~16 MiB chunks and records the ordered chunk hashes inside the
+  file's one blob_registered. A node replicates the file as a unit: chunks are
+  fetched by byte range, spread across the peers that hold the whole file (the
+  logs are the tracker; each peer is asked LIVE what it holds), each verified
+  into a crash-surviving staging directory. (A peer still assembling a file
+  serving the chunks it has — a torrent-style 'have' bitfield, and truly
+  parallel fetches — is a later refinement.) The node records ONE fact when the
+  file is whole:
+  blob_stored. There is no started / progress / per-chunk fact — in progress
+  simply means "wanted but not stored", and a crash costs a re-hash of the
+  staging directory.
+
+  7. Nothing destroys the last copy. There is no global delete; the only
+  removal is local EVICTION, which refuses unless enough OTHER sites hold a copy
+  that is fresh in the log (stored or scrubbed within verify_max_age_days) AND
+  proven right now: each peer is asked to re-hash its file and report its own
+  live role and draining state — a size match is not proof, and a peer that is
+  itself leaving does not count. At least one proven holder must be a
+  non-draining archive. Role closes the double-eviction race: only a 'hot' node
+  evicts under pressure; only a draining node evicts to drain; a 'cold' node (an
+  external drive that may be unplugged tomorrow) never evicts and never counts
+  as that archive. A node never evicts, under pressure, a collection it WANTS in
+  full.
+
+  8. Devices differ, and so do failure domains. A node announces its ROLE
+  ('hot', 'archive', 'cold'), its SITE (where it physically lives — the laptop
+  and a home server share one, and one fire loses both), and the collections it
+  WANTS in full. min_sites counts distinct SITES with a verified copy: stored
+  or scrubbed within the collection's verify_max_age_days — a drive in a box
+  rots unobserved.
+
+  9. Pacing, against thundering herds. Merging a peer's history hands facts to
+  policies. So policies act on FRESH facts only (occurred_at within
+  env.store.live_window_s), react to at most env.store.max_dispatch_per_event
+  events of each type per merge (a bulk adoption that arrives fresh is still a
+  bulk), and dispatch a bounded number of commands per event. Bulk catch-up is
+  the host's paced SWEEP: replicate_blob for each of get_missing_blobs, and
+  evict_blob for each of get_eviction_candidates while under pressure or
+  draining — at most max_dispatch_per_event attempts a tick, remembering what it
+  could not do and backing off, so one unfetchable blob never blocks the rest.
+  Byte-moving procedures obey env.store's bytes-per-second limits.
+
+  10. Reachability is observation, not fact. peer_health telemetry reports
+  every attempt; peer_link_changed is recorded only when a link flips up or
+  down, so a laptop asleep overnight is one fact, not one per cron tick.
+
+  11. Two limits on space. limit_bytes is how much of ITS OWN disk a device
+  may use for blobs; min_free_bytes is how little the FILESYSTEM may have left —
+  the store is rarely the only writer, and a server whose logger filled the disk
+  is as full as one whose cache did. Falling over the first (past the high
+  watermark) or under the second is pressure: a hot node answers it by evicting
+  what is provably held elsewhere; any node refuses to fetch what would cross
+  the floor (blob_replication_failed 'out_of_space'). Pressure is a trigger, not
+  a target: relief goes down to the low watermark, and a quarter of the floor
+  above it.
+
+
+  FOOTNOTES (not modeled yet)
+
+  - Safety measure: get_at_risk_blobs is the first cut. Later, a durable record
+  of each node's availability and assist rate (peer_link_changed is its seed),
+  so placement can learn which devices are dependable.
+
+  - Deletion: none, by design. The intended answer is an ARCHIVAL tier that
+  pushes blobs to tape or optical discs — cold devices with slow, asynchronous
+  restores and sealed volumes (a future medium field and volume_sealed fact).
+  Every device's catalog replicates, so the log can say which disc holds X and
+  where it lives (location_note).
+
+  - Membership and auth: who may join or author cluster facts is the host's
+  concern for now (a shared peer token, or tailnet identity; peers must share a
+  cluster_id).
+
+
+  Host wiring is NOT modeled here: the daemon — an HTTP peer API for other
+  devices, and a local admin API with the edge's streaming PUT and a GET with
+  read-through (on a local miss the host dispatches replicate_blob with reason
+  'read_through' and serves the bytes once they land); its tick loop (sync_peer
+  over list_peers, the sweep, check_capacity, scrub_blobs, flushing coalesced
+  reads); and the CLI. The engine shell is single-threaded and async-first; this
+  file is its contract.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commands — write intents
+# ─────────────────────────────────────────────────────────────────────────────
+commands:
+  create_cluster: >-
+    Found the cluster: carries a generated cluster_id and occurred_at. Issued
+    once by the first device; every other device joins by being configured
+    with the cluster_id and syncing.
+  announce_node: >-
+    Declare or update this node's public card (its identity — node_id,
+    cluster_id and epoch, this life's random id — comes from env.store): role ('hot' — small, keeps what is recent or likely read, the only role
+    that evicts under pressure; 'archive' — big, keeps what it wants; 'cold' —
+    a drive only sometimes online, fills when plugged in, never evicts), site,
+    location_note (free text: "garage shelf, box 3"), endpoints (urls), wants
+    (collections it wants in full, or ['*']), and draining (being retired:
+    never a replication target or anchor, evicts what is safely elsewhere;
+    re-announce with false to cancel).
+    Issued by the host at startup and on config change; the latest wins.
+  set_collection_policy: >-
+    Declare a collection's policy: min_sites (distinct sites that must hold a
+    verified copy), verify_max_age_days, and evictable (whether hot nodes may
+    drop its bytes). Issued by the host (UI/CLI); the latest wins.
+  put_blob: >-
+    Record a blob the edge has ALREADY written under this node's root: sha256
+    blob_hash, byte_size and collection — never the bytes, never metadata —
+    plus, for a large file, chunk_size and the ordered chunk_hashes. The edge
+    hashes while streaming the upload, before dispatching.
+  adopt_collection: >-
+    Bring an existing directory under management WITHOUT touching it: record
+    every file as a blob this node holds. Carries collection, root and layout
+    ('cas' — a sharded <aa>/<bb>/<sha256> tree whose names are CLAIMED to be
+    the hashes; 'tree' — arbitrary files; paths are not kept) and, optionally,
+    link: true. Every new file is HASHED on the way in: one whose bytes do not
+    match its name is skipped and reported, never recorded. By default each file
+    is COPIED into this node's root, so the original can be edited or deleted
+    without touching the store; link: true hard-links instead (same filesystem
+    only, falling back to a copy) for a tree that nothing edits in place — it
+    costs no extra space, and frees none when the store evicts. Issued by the host.
+  replicate_blob: >-
+    Fetch one blob (a whole file, however chunked) from peers. Carries
+    blob_hash, an OPTIONAL from_node, and a reason: 'replica' (a policy reacted
+    to a fresh blob_stored), 'backfill' (the host sweep — this also repairs
+    corrupt or missing copies) or 'read_through' (an edge miss).
+  evict_blob: >-
+    Drop this node's bytes for one blob; it stays registered and held
+    elsewhere. Carries blob_hash and a reason ('pressure' | 'drain').
+  set_blob_pin: >-
+    Keep (or release) this node's bytes for a blob regardless of pressure — a
+    favorite, a book being read. Carries blob_hash, pinned, optional reason.
+    Issued by the host.
+  record_blob_access: >-
+    Flush the edge's coalesced read times (one event per read would flood the
+    log): a batch of (blob_hash, last_access_at). Issued by the host
+    periodically; drives LRU eviction.
+  check_capacity: >-
+    Measure this node's storage use against its limit and watermarks. Carries
+    nothing. Issued by the host on a cron tick and after large puts.
+  sync_peer: >-
+    Exchange logs with one peer. Carries peer_id and direction ('pull' | 'push'
+    — ask the peer to pull from this node | 'both'). Issued by the host (cron) and by policy when a peer announces.
+  scrub_blobs: >-
+    Integrity sweep over this node's held blobs. Carries an optional collection
+    and max_bytes (this run's budget). Issued by the host on a slow cron.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Events — immutable facts ([cluster] facts are about the pool, [device] facts
+# about one node; all replicate to every device)
+# ─────────────────────────────────────────────────────────────────────────────
+events:
+  cluster_created: >-
+    [cluster] The cluster was founded (cluster_id, created_by — node_id,
+    occurred_at). The log is self-describing: a surviving log alone names the
+    cluster.
+  node_announced: >-
+    [cluster] A node's public card (node_id, cluster_id, epoch, role, site,
+    location_note, endpoints, wants, draining, occurred_at). Latest occurred_at
+    per node_id wins (ties: payload digest); its epoch is the node's CURRENT life —
+    locations claimed under any other epoch stop counting.
+  collection_policy_set: >-
+    [cluster] A collection's policy (collection, min_sites, verify_max_age_days,
+    evictable, occurred_at). Latest occurred_at per collection wins (ties:
+    payload digest).
+  blob_registered: >-
+    [cluster] A blob EXISTS in the cluster (blob_hash, byte_size, collection,
+    occurred_at — and, for a large file only, chunk_size and the ordered
+    chunk_hashes, the recipe peers fetch it by), whoever holds it. Recorded by
+    whichever device first puts or adopts it; a set — the first wins, a later
+    one carrying chunking may fill it in if absent.
+  blob_stored: >-
+    [device] A node holds the COMPLETE, verified blob (node_id, epoch, blob_hash,
+    source — 'upload' | 'adopted' | 'replica' | 'backfill' | 'read_through',
+    occurred_at). For a chunked file, recorded only once it is assembled. Also
+    the replication request: peers' policies react to it. Size and collection
+    come from blob_registered.
+  blob_evicted: >-
+    [device] A node dropped its bytes (node_id, epoch, blob_hash, reason,
+    confirmed_sites — how many other sites were confirmed holding it,
+    occurred_at). The blob lives on elsewhere.
+  blob_pin_set: >-
+    [device] A node pinned or unpinned a blob (node_id, epoch, blob_hash,
+    pinned, reason, occurred_at).
+  blob_access_recorded: >-
+    [device] A batch of read times (node_id, epoch, accesses — list of
+    blob_hash / last_access_at, occurred_at). The only access fact.
+  blob_corrupt: >-
+    [device] A node's copy is bad (node_id, epoch, blob_hash, found_hash —
+    absent when the file is missing or unreadable, occurred_at). The file is quarantined;
+    repair is the sweep's job.
+  blob_replication_failed: >-
+    [device] A fetch did not yield a verified blob (node_id, blob_hash,
+    from_node, reason — 'not_held' | 'hash_mismatch' | 'out_of_space',
+    occurred_at). Unreachable peers are peer_link_changed, not this. A
+    hash_mismatch is also a signal about the SOURCE node.
+  space_pressure_detected: >-
+    [device] A node is over its high watermark or under its free-space floor
+    (node_id, used_bytes — held blobs, limit_bytes, free_bytes — the
+    filesystem's room left, bytes_to_free — to reach the low watermark and to
+    restore the floor with a quarter of it to spare, whichever is more,
+    occurred_at). Emitted only when under pressure.
+  scrub_completed: >-
+    [device] A scrub run finished (node_id, epoch, collection, checked,
+    corrupt, bytes_checked, cursor — where the next run resumes (empty after a
+    finished pass), pass_complete — the end was reached, so every held blob
+    was verified at some point since pass_started_at, pass_started_at — when
+    this pass began, occurred_at). Each bad blob also gets its own
+    blob_corrupt.
+  peer_link_changed: >-
+    [device] A node's link to a peer flipped (node_id, peer_id, healthy, reason,
+    occurred_at). Recorded on transitions only; an unknown link counts as
+    healthy, so the first failure is a transition.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Procedures — command handlers
+# ─────────────────────────────────────────────────────────────────────────────
+procedures:
+  create_cluster:
+    description: >-
+      Refuse when env.store.cluster_id is already set; otherwise emit
+      cluster_created with the command's cluster_id and env.store.node_id as
+      created_by.
+    command: create_cluster
+    environment: [store]
+    emits: [cluster_created]
+
+  announce_node:
+    description: >-
+      Validate role and site, and emit node_announced for env.store.node_id
+      carrying env.store.epoch and cluster_id. occurred_at is bumped to just
+      after this node's previous announcement when the clock has not moved on
+      (get_node_profile).
+    command: announce_node
+    queries: [get_node_profile]
+    environment: [store]
+    emits: [node_announced]
+
+  set_collection_policy:
+    description: >-
+      Reject min_sites < 1, then emit collection_policy_set — with occurred_at
+      bumped to just after the collection's current declaration when the clock
+      has not moved on (get_collection_policy).
+    command: set_collection_policy
+    queries: [get_collection_policy]
+    emits: [collection_policy_set]
+
+  put_blob:
+    description: >-
+      Idempotent: emit NOTHING when this node already holds the hash
+      (get_blob_replicas). Refuse a chunk recipe that could never be used
+      (chunk_size > 0, ceil(byte_size / chunk_size) hashes, each a sha256).
+      Otherwise emit blob_registered when the hash is new to the cluster
+      (get_blob) — carrying the chunking when given — and blob_stored (source
+      'upload'). Does not touch the bytes beyond a size check.
+    command: put_blob
+    queries: [get_blob_replicas, get_blob]
+    environment: [store]
+    emits: [blob_registered, blob_stored]
+
+  adopt_collection:
+    description: >-
+      EFFECT: walk root. A 'cas' file whose name is already held here
+      (get_blob_replicas) is skipped without reading it — scrub covers it — so
+      re-running an adoption costs a directory walk. Every other file is HASHED
+      (rate-limited by env.store.scrub_bytes_per_sec); a 'cas' file whose bytes
+      do not match its name is skipped, reporting to progress. Then copy it
+      into env.store.root's sharded layout — or, with link: true, hard-link it
+      (a file already at the address is kept only if it IS those bytes, else
+      replaced atomically; nothing at the original path is ever touched) —
+      emit blob_registered when new to the cluster (get_blob) and blob_stored
+      (source 'adopted'). Forwards a progress summary.
+    command: adopt_collection
+    queries: [get_blob_replicas, get_blob]
+    environment: [store]
+    telemetry: [progress]
+    emits: [blob_registered, blob_stored]
+
+  replicate_blob:
+    description: >-
+      EFFECT: refuse when the blob would put this node over
+      env.store.limit_bytes (get_node_usage) or leave the filesystem under
+      env.store.min_free_bytes (env.disk.free_bytes()) — blob_replication_failed
+      'out_of_space'. Otherwise pick a source (from_node, else the best
+      reachable holder per get_blob_replicas — never a corrupt or evicted
+      copy). A plain blob streams into env.store.tmp_dir while hashing; a
+      chunked one (get_blob has chunk_hashes) is fetched as chunks, one
+      after another, each from the next holder in turn (parallel fetching is
+      a later refinement), availability asked LIVE, each chunk
+      verified into a staging directory that survives a crash (a restart re-
+      hashes what is there and resumes). Verify the final sha256, move into
+      place atomically, and emit blob_stored ONCE when whole (source = the
+      reason). Idempotent: nothing when already held. On not-held / hash
+      mismatch / no space emit blob_replication_failed and stop — retry is the
+      sweep. Obeys env.store.max_bytes_per_sec (a token bucket). Forwards
+      transfer progress and peer reachability. A recipe that fails the
+      put_blob validation is ignored (the whole file is fetched and verified
+      instead). A full disk is blob_replication_failed 'out_of_space', not a
+      crash.
+    command: replicate_blob
+    queries: [get_blob_replicas, get_blob, get_node_usage]
+    environment: [store, peers, disk]
+    telemetry: [transfer_progress, peer_health]
+    emits: [blob_stored, blob_replication_failed]
+
+  evict_blob:
+    description: >-
+      EFFECT: refuse (reported to progress; no event) unless ALL hold: the
+      blob is unpinned here; its collection is evictable
+      (get_collection_policy) and, for reason 'pressure', not one this node
+      WANTS in full (get_node_profile); this node's role permits the reason
+      ('pressure' only for 'hot', 'drain' only while this node is draining,
+      never 'cold'); and OTHER nodes' copies — per get_blob_replicas
+      'present', non-draining and fresh (verified_at within
+      verify_max_age_days) — span at least min_sites distinct sites. Each
+      candidate is then PROVEN live: asked (peers.verify_blob) to re-hash its
+      file and report its own role and draining state; a peer that is
+      unreachable, lacks the bytes, has the wrong bytes, or is itself draining
+      does not count. Only when the proven copies span min_sites sites
+      including a non-draining archive, delete the local file and emit
+      blob_evicted with confirmed_sites.
+    command: evict_blob
+    queries: [get_blob_replicas, get_blob, get_collection_policy, get_node_profile]
+    environment: [store, peers]
+    telemetry: [peer_health, progress]
+    emits: [blob_evicted]
+
+  set_blob_pin:
+    description: >-
+      Emit blob_pin_set when it changes the pin state of a blob this node holds
+      (get_blob_replicas); nothing otherwise.
+    command: set_blob_pin
+    queries: [get_blob_replicas]
+    environment: [store]
+    emits: [blob_pin_set]
+
+  record_blob_access:
+    description: >-
+      Emit one blob_access_recorded for the batch; NOTHING for an empty batch.
+    command: record_blob_access
+    environment: [store]
+    emits: [blob_access_recorded]
+
+  check_capacity:
+    description: >-
+      EFFECT: take two readings — bytes held (get_node_usage) against
+      limit_bytes and the watermarks, and env.disk.free_bytes() against
+      min_free_bytes. Emit space_pressure_detected only when held bytes are above
+      the HIGH watermark OR free space is under the floor, with bytes_to_free
+      the larger of what reaches the LOW watermark and what restores the floor
+      with a quarter of it to spare (hysteresis keeps a node just inside quiet).
+      Reports the readings to progress either way.
+    command: check_capacity
+    queries: [get_node_usage]
+    environment: [store, disk]
+    telemetry: [progress]
+    emits: [space_pressure_detected]
+
+  sync_peer:
+    description: >-
+      EFFECT: exchange logs with one peer. Refuse a peer whose cluster_id
+      differs. PULL: reconcile the two logs' id sets, pull the missing events
+      in batches (hash-verified, parents first), fold them through the
+      projections and hand them to policies — the event store's anti-entropy,
+      so they are NOT emitted here. PUSH: ask the peer to pull from this node.
+      Emit peer_link_changed only when the link flips (get_peer_link), stamped
+      strictly after the link's previous change; report every attempt to
+      peer_health. Placement is never decided here — the
+      merged events trigger each node's policies.
+    command: sync_peer
+    queries: [get_peer_link]
+    environment: [store, peers]
+    telemetry: [peer_health, progress]
+    emits: [peer_link_changed]
+
+  scrub_blobs:
+    description: >-
+      EFFECT: iterate this node's held blobs from the saved cursor
+      (get_blobs_held), re-hash each from disk within the max_bytes budget;
+      for a mismatch or a missing / unreadable file (an I/O error is a bad
+      copy, not a crash), quarantine what exists and emit blob_corrupt. Finish
+      with scrub_completed carrying pass_started_at — when this pass began
+      (now, for a fresh pass). Rate-limited by env.store.scrub_bytes_per_sec
+      so it never starves serving. Forwards progress.
+    command: scrub_blobs
+    queries: [get_blobs_held]
+    environment: [store]
+    telemetry: [progress]
+    emits: [blob_corrupt, scrub_completed]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Models — read-model schema (LinkML classes authored in def/models/)
+# ─────────────────────────────────────────────────────────────────────────────
+models:
+  pool:
+    description: >-
+      The pool as the replicated logs say it is. Classes: nodes (node_id,
+      cluster_id, epoch, role, site, location_note, endpoints, wants,
+      draining, announced_at); collection_policies (collection, min_sites,
+      verify_max_age_days, evictable); blobs (blob_hash,
+      byte_size, collection, first_seen_at — all from the earliest registration
+      — and for chunked files chunk_size + ordered chunk_hashes, from the
+      earliest recipe; what EXISTS, whoever holds it); blob_locations
+      ((blob_hash, node_id, epoch): state 'present' | 'evicted' | 'corrupt',
+      pinned, stored_at, last_access_at — one row per LIFE of a
+      node, and only rows under the node's current epoch count, so a wiped
+      device's old claims never need cleaning up); scrub_state ((node_id,
+      collection, epoch): cursor, pass_started_at, last_full_pass_at); peer_links ((node_id,
+      peer_id): healthy, changed_at). One schema, so a query can join
+      locations with policy, scrub state and nodes.
+    adapters: [sqla]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Projections — event → read model
+# ─────────────────────────────────────────────────────────────────────────────
+projections:
+  node_upsert:
+    description: >-
+      Upsert a nodes row from node_announced: the latest occurred_at wins (ties:
+      payload digest), so the row's epoch is the node's current life.
+    event: node_announced
+    model: pool
+    adapter: sqla
+  collection_policy_upsert:
+    description: >-
+      Upsert a collection_policies row from collection_policy_set (latest
+      occurred_at wins, ties by payload digest; an older one is ignored).
+    event: collection_policy_set
+    model: pool
+    adapter: sqla
+  blob_catalog_store:
+    description: >-
+      Insert a blobs row from blob_registered when the hash is new; for a
+      known hash keep the EARLIEST registration's byte_size, collection and
+      first_seen_at by (occurred_at, payload digest) — so two devices that
+      register one blob concurrently converge, whichever event a node folds
+      first — and keep the earliest chunk recipe seen, likewise.
+    event: blob_registered
+    model: pool
+    adapter: sqla
+  blob_location_present:
+    description: >-
+      Upsert the (blob_hash, node_id, epoch) location as 'present' with
+      stored_at, keeping any pin and last_access_at. Tolerates arriving before
+      the blob's blob_registered.
+    event: blob_stored
+    model: pool
+    adapter: sqla
+  blob_location_evicted:
+    description: Set the (blob_hash, node_id, epoch) location to 'evicted'.
+    event: blob_evicted
+    model: pool
+    adapter: sqla
+  blob_location_corrupt:
+    description: >-
+      Set the (blob_hash, node_id, epoch) location to 'corrupt', so no peer
+      picks it as a source and it stops counting toward min_sites.
+    event: blob_corrupt
+    model: pool
+    adapter: sqla
+  blob_location_pin:
+    description: >-
+      Set pinned on the (blob_hash, node_id, epoch) location from blob_pin_set.
+    event: blob_pin_set
+    model: pool
+    adapter: sqla
+  blob_access_fold:
+    description: >-
+      For each access entry, advance the location's last_access_at (max wins —
+      idempotent under re-fold); entries for unknown locations are ignored.
+    event: blob_access_recorded
+    model: pool
+    adapter: sqla
+  scrub_state_store:
+    description: >-
+      Upsert scrub_state (node_id, collection, epoch): while a pass is in
+      progress keep its cursor and pass_started_at; on pass_complete clear
+      them and set last_full_pass_at to the pass's START (pass_started_at) —
+      conservative: blobs verified early in a long pass are only as fresh as
+      its beginning.
+    event: scrub_completed
+    model: pool
+    adapter: sqla
+  peer_link_upsert:
+    description: >-
+      Upsert the (node_id, peer_id) peer_links row with healthy and
+      changed_at.
+    event: peer_link_changed
+    model: pool
+    adapter: sqla
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Queries — read interfaces
+# ─────────────────────────────────────────────────────────────────────────────
+queries:
+  get_node_profile:
+    description: >-
+      One node's card (input: node_id): role, site, epoch, location_note,
+      endpoints, wants, draining, announced_at; found flag.
+    model: pool
+    adapter: sqla
+  list_peers:
+    description: >-
+      Every known node except a given node_id, with its card — the peer set for
+      the host's sync sweep.
+    model: pool
+    adapter: sqla
+  get_node_usage:
+    description: >-
+      What a node holds (input: node_id): held_count and held_bytes of its
+      'present' locations under its current epoch — a cheap aggregate, unlike
+      get_drain_remaining. Readers: replicate_blob's budget check, the daemon's
+      status.
+    model: pool
+    adapter: sqla
+  get_collection_policy:
+    description: >-
+      A collection's policy (input: collection): min_sites, verify_max_age_days,
+      evictable, declared_at. Defaults when undeclared: min_sites 1, verify_max_age_days 30,
+      evictable true.
+    model: pool
+    adapter: sqla
+  get_blob:
+    description: >-
+      A blob's catalog row (input: blob_hash): byte_size, collection,
+      first_seen_at, and chunk_size + ordered chunk_hashes when chunked; found
+      flag (false means new to the cluster). Also the chunk recipe
+      replicate_blob and the edge's streaming read follow.
+    model: pool
+    adapter: sqla
+  get_blob_replicas:
+    description: >-
+      Who holds a blob (input: blob_hash): every location — node_id, state,
+      epoch, pinned, stored_at, last_access_at, verified_at (stored, or the
+      last full scrub pass if later) — with its node's role, site and draining
+      flag. Only locations under the node's CURRENT epoch are returned — a
+      superseded life's claims stop counting. The single answer to "who has
+      X?" and the idempotency check for put, adopt, replicate and pin.
+    model: pool
+    adapter: sqla
+  get_missing_blobs:
+    description: >-
+      Registered blobs a node should hold but does not (input: node_id, limit,
+      order 'newest' | 'smallest'): in a collection it wants ('*' = all), or
+      pinned on it, with no 'present' location on it — so corrupt and evicted
+      copies, and a wiped device's old claims, count as missing. Reader: the
+      host's paced sweep.
+    model: pool
+    adapter: sqla
+  get_eviction_candidates:
+    description: >-
+      Blobs a node may drop (input: node_id, bytes_needed, limit): its
+      'present', unpinned locations in evictable collections that OTHER non-
+      draining nodes hold fresh and 'present' across at least min_sites
+      distinct sites, including a non-draining archive. A 'hot' node gets them
+      least recently TOUCHED first (last read, else when stored), skipping
+      collections it WANTS in full, stopping once bytes_needed is covered; a
+      draining node gets all of them; a 'cold' node gets none. Advisory —
+      evict_blob re-checks live. Readers: evict_on_space_pressure and the
+      host's drain sweep.
+    model: pool
+    adapter: sqla
+  get_at_risk_blobs:
+    description: >-
+      Registered blobs held by fewer distinct sites than their collection's
+      min_sites (input: limit, optional collection): blob_hash, byte_size,
+      collection, first_seen_at, sites_holding, sites_needed. A copy counts when
+      'present', on a non-draining node, and fresh — stored, or its node's
+      last_full_pass_at, within verify_max_age_days. sites_holding = 0 is LOSS.
+      The first cut of the safety measure; surfaced in the UI.
+    model: pool
+    adapter: sqla
+  get_drain_remaining:
+    description: >-
+      What a node still holds (input: node_id): count and bytes of its
+      'present' locations, and how many of those are not yet droppable (not
+      safe elsewhere, pinned, or non-evictable) — the ones blocking its drain.
+      Zero means it can be unplugged. Reader:
+      UI/CLI.
+    model: pool
+    adapter: sqla
+  get_blobs_held:
+    description: >-
+      A node's 'present' locations in hash order, continuing from its saved
+      scrub cursor (input: node_id, optional collection, limit) — the stable
+      iteration scrub resumes over — with the pass_started_at of the pass in
+      progress.
+    model: pool
+    adapter: sqla
+  get_peer_link:
+    description: >-
+      One link's state (input: node_id, peer_id): healthy, changed_at;
+      healthy=true for a link never seen.
+    model: pool
+    adapter: sqla
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Policies — event → command reactions (decisions live in the queries)
+# ─────────────────────────────────────────────────────────────────────────────
+policies:
+  replicate_on_peer_blob_stored:
+    description: >-
+      When a PEER stores a blob (blob_stored for another node_id), dispatch
+      replicate_blob (reason 'replica') if this node wants it: not draining
+      (get_node_profile), the blob's collection (get_blob) is in its wants, and
+      it does not already hold it (get_blob_replicas). Fresh facts only — older
+      ones are the sweep's job, as is a blob whose blob_registered has not
+      merged yet (get_blob finds nothing). This is the whole "push": a node that
+      stores something says so, and every interested peer reacts.
+    event: blob_stored
+    queries: [get_node_profile, get_blob, get_blob_replicas]
+    environment: [store]
+    emits: [replicate_blob]
+
+  evict_on_space_pressure:
+    description: >-
+      When THIS node reports space_pressure_detected (peers' are ignored),
+      dispatch evict_blob (reason 'pressure') for the get_eviction_candidates
+      that cover bytes_to_free, at most env.store.max_dispatch_per_event; the
+      next pressure reading follows if more is needed.
+    event: space_pressure_detected
+    queries: [get_eviction_candidates]
+    environment: [store]
+    emits: [evict_blob]
+
+  sync_on_node_announced:
+    description: >-
+      When a PEER announces itself (a fresh node_announced for another
+      node_id), dispatch sync_peer direction 'both' — joining the pool is being
+      announced, then syncing. Idempotent: a re-announcement costs one
+      digest exchange.
+    event: node_announced
+    environment: [store]
+    emits: [sync_peer]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Environment — host-injected configuration (shapes in def/environment.yaml)
+# ─────────────────────────────────────────────────────────────────────────────
+environment:
+  store: >-
+    This node's config: node_id (stable, unique in the pool); cluster_id (unset
+    until it founds or joins one); epoch (random, generated once when the
+    device's state is created — a wiped device gets a new one); root (the sharded
+    <aa>/<bb>/<sha256> blob tree — on the server, the EXISTING cas/);
+    state_dir (<root>/.store/: identity, log — what makes the device
+    portable); tmp_dir and quarantine_dir (same filesystem as root, for staging
+    and atomic moves); limit_bytes with high_watermark / low_watermark
+    (fractions of it that start and stop eviction); the pacing knobs of
+    principle 9 (live_window_s, max_dispatch_per_event, max_bytes_per_sec,
+    scrub_bytes_per_sec); and chunk_threshold_bytes /
+    chunk_size for the edge; and min_free_bytes (principle 11; 0 = off).
+    Injected by the host from its layered configuration.
+  disk: >-
+    How much room the filesystem under root has left for an ordinary (non-root)
+    writer: free_bytes() — statvfs f_bavail, which excludes the blocks ext4
+    reserves for root. Host-implemented, because it is an observation of the
+    machine and not a fact; a simulation supplies its own.
+  peers: >-
+    A client for reaching other nodes by node_id over any private link — a
+    Tailscale tailnet (stable names, NAT traversal) or an SSH tunnel. Addresses
+    are the endpoints peers announce (a card's endpoints are plain URLs),
+    bootstrapped by seeds and by the endpoint hint a peer sends when it asks to
+    be pulled; peers authenticate with a shared bearer token (or tailnet
+    identity where available). The transport (HTTP: bucketed anti-entropy,
+    ranged blob streaming) is the host's.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Telemetry — host-injected observation sinks (never recorded as events)
+# ─────────────────────────────────────────────────────────────────────────────
+telemetry:
+  progress: >-
+    Stage progress (stage, detail) for long steps and for quiet refusals —
+    adopt walks, scrubs, capacity readings, log exchanges, evictions declined.
+  transfer_progress: >-
+    Bytes moved for an in-flight transfer (blob_hash, peer_id, bytes_done,
+    bytes_total), per chunk, so the UI can show a streaming fetch.
+  peer_health: >-
+    A peer's reachability as just observed (peer_id, reachable, latency_ms,
+    detail). Transient by design; peer_link_changed records only the flips.

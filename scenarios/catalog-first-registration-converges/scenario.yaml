@@ -1,0 +1,9 @@
+- cluster: {a: {role: archive, site: s1, wants: []}, b: {role: archive, site: s2, wants: []}}
+- sync: all
+- net: {partition: [[a], [b]]}
+- {at: a, upload: x, size: 1KB, collection: photos}
+- advance: 1m
+- {at: b, upload: x, size: 1KB, collection: docs}
+- net: {heal: true}
+- sync: all
+- claim: {at: b, query: get_blob, input: {blob_hash: $x}, expect: {equals: {collection: photos}}}

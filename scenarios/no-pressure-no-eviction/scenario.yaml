@@ -1,0 +1,14 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], limit_bytes: 10KB, high_watermark: 0.9, low_watermark: 0.5}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: "photo-{n}", count: 3, size: 2KB}
+- sync: all
+- sweep: server
+- sweep: server
+# 6 KB of a 10 KB limit: above the 50% low watermark but under the 90% high one. Room
+# enough: a hot node keeps everything, though every blob is safe elsewhere and "freeing
+# down to 50%" would be possible. (Pressure is a trigger, not a target.)
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 3}}}
+- {at: server, command: check_capacity}
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 3}}}

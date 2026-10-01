@@ -1,0 +1,41 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: server, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+
+# the laptop's drive is replaced; its clock reset to ten days before anything
+# in the log, and it announces BEFORE it has seen anyone's log (first boot, offline)
+- wipe: laptop
+- {advance: -10d}
+- announce: laptop
+- sync: all
+# the merge keeps its predecessor's later-dated announcement, so for now the
+# cluster still counts the wiped disk's claims under the OLD epoch
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect: {contains: [{node_ids: laptop, epochs: laptop-1}]}
+
+# stale history triggers no policy — it is the sweep that notices its own word
+# lost, announces again strictly later, and then repairs the missing copy
+- sweep: laptop
+- sync: all
+- claim:
+    at: server
+    query: get_node_profile
+    input: {node_id: laptop}
+    expect: {equals: {epoch: laptop-2}}
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect:
+      count: 2
+      contains: [{node_ids: server, epochs: server-1}, {node_ids: laptop, epochs: laptop-2}]
+      not_contains: [{node_ids: laptop, epochs: laptop-1}]
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

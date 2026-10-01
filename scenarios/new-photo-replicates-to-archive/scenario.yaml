@@ -1,0 +1,19 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all                      # introductions: each learns the other's card
+
+- {at: server, upload: photo-1, size: 4KB, collection: photos}
+- sync: all                      # the laptop sees a fresh blob_stored and reacts
+
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect:
+      count: 2
+      contains:
+        - {node_ids: server, states: present}
+        - {node_ids: laptop, states: present}
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

@@ -1,0 +1,21 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], limit_bytes: 10KB, high_watermark: 0.8, low_watermark: 0.5}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 3KB}
+- {at: server, upload: photo-2, size: 3KB}
+- {at: server, upload: photo-3, size: 3KB}
+- sync: all
+# ten minutes later photo-3 is viewed; 1 and 2 were never read since they were stored
+- advance: 10m
+- {at: server, command: record_blob_access,
+   fields: {blob_hashes: [$photo-3], last_access_ats: ['2026-01-01T00:10:00']}}
+
+# 9KB of a 10KB limit is over the 80% watermark: free down to 50%
+- {at: server, command: check_capacity}
+- claim: {at: server, blob: $photo-1, has: false}
+- claim: {at: server, blob: $photo-2, has: false}
+- claim: {at: server, blob: $photo-3, has: true}
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim: {at: laptop, blob: $photo-2, has: true}
+- claim: {at: laptop, blob: $photo-3, has: true}

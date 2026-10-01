@@ -1,0 +1,16 @@
+id: https://example.org/queries/get_node_usage
+name: get_node_usage
+description: 'What a node holds (input: node_id): held_count and held_bytes of its ''present'' locations under its current epoch — a cheap aggregate, unlike get_drain_remaining. Readers: replicate_blob''s budget check, the daemon''s status.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetNodeUsageInput:
+    description: Input for get_node_usage
+    attributes:
+      node_id: {range: string, required: true}
+  GetNodeUsageOutput:
+    description: Output for get_node_usage
+    attributes:
+      held_count: {range: integer, required: true}
+      held_bytes: {range: integer, required: true}

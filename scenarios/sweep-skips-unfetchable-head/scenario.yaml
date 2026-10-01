@@ -1,0 +1,15 @@
+- cluster: {a: {role: archive, site: s1, wants: ['*']}, b: {role: archive, site: s2, wants: ['*'], max_dispatch_per_event: 2}}
+- sync: all
+- net: {offline: b}
+- {at: a, upload: "good-{n}", count: 3, size: 1KB}
+- advance: 1h
+- {at: a, upload: "lost-{n}", count: 2, size: 1KB}
+- fault: {at: a, remove: $lost-1}
+- fault: {at: a, remove: $lost-2}
+- advance: 3d
+- net: {online: b}
+- sync: all
+- sweep: b
+- sweep: b
+- sweep: b
+- claim: {at: b, blob: $good-1, has: true}

@@ -1,0 +1,14 @@
+- cluster:
+    a: {role: archive, site: s1, wants: ['*']}
+    b: {role: archive, site: s2, wants: ['*']}
+- sync: all
+- {net: {partition: [[a], [b]]}}
+- {at: a, command: set_collection_policy,
+   fields: {collection: docs, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- {advance: 1m}
+- {at: b, command: set_collection_policy,
+   fields: {collection: docs, min_sites: 3, verify_max_age_days: 30, evictable: true}}
+- {net: {heal: true}}
+- sync: all
+- claim: {at: a, query: get_collection_policy, input: {collection: docs}, expect: {equals: {min_sites: 3}}}
+- claim: {at: b, query: get_collection_policy, input: {collection: docs}, expect: {equals: {min_sites: 3}}}

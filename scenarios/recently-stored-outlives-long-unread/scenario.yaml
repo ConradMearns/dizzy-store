@@ -1,0 +1,17 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: old-read, size: 2KB}
+- sync: all
+- {advance: 1h}
+- {at: server, command: record_blob_access,
+   fields: {blob_hashes: [$old-read], last_access_ats: ['2026-01-01T01:00:00']}}   # last viewed at 01:00
+- {advance: 1h}
+- {at: server, upload: fresh-unread, size: 2KB}                                     # stored at 02:00, never viewed
+- sync: all
+# ONE timeline — the last touch: viewed 01:00 is older than stored 02:00, so the VIEWED photo goes first
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server},
+          expect: {equals: {blob_hashes: [$old-read, $fresh-unread]}}}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server, limit: 1},
+          expect: {count: 1}}

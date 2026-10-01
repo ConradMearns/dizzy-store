@@ -1,0 +1,20 @@
+id: https://example.org/queries/get_collection_policy
+name: get_collection_policy
+description: 'A collection''s policy (input: collection): min_sites, verify_max_age_days, evictable, declared_at. Defaults when undeclared: min_sites 1, verify_max_age_days 30, evictable true.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetCollectionPolicyInput:
+    description: Input for get_collection_policy
+    attributes:
+      collection: {range: string, required: true}
+  GetCollectionPolicyOutput:
+    description: Output for get_collection_policy
+    attributes:
+      collection: {range: string, required: true}
+      min_sites: {range: integer, required: true}
+      verify_max_age_days: {range: integer, required: true}
+      evictable: {range: boolean, required: true}
+      declared: {range: boolean, required: true, description: false when these are the defaults}
+      declared_at: {range: string, required: false, description: ISO 8601; empty when undeclared}

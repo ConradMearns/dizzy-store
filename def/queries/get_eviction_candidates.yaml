@@ -1,0 +1,19 @@
+id: https://example.org/queries/get_eviction_candidates
+name: get_eviction_candidates
+description: 'Blobs a node may drop (input: node_id, bytes_needed, limit): its ''present'', unpinned locations in evictable collections that OTHER non- draining nodes hold fresh and ''present'' across at least min_sites distinct sites, including a non-draining archive. A ''hot'' node gets them least recently TOUCHED first (last read, else when stored), skipping collections it WANTS in full, stopping once bytes_needed is covered; a draining node gets all of them; a ''cold'' node gets none. Advisory — evict_blob re-checks live. Readers: evict_on_space_pressure and the host''s drain sweep.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetEvictionCandidatesInput:
+    description: Input for get_eviction_candidates
+    attributes:
+      node_id: {range: string, required: true}
+      bytes_needed: {range: integer, required: false}
+      limit: {range: integer, required: false}
+  GetEvictionCandidatesOutput:
+    description: Output for get_eviction_candidates
+    attributes:
+      blob_hashes: {range: string, required: false, multivalued: true}
+      byte_sizes: {range: integer, required: false, multivalued: true}
+      collections: {range: string, required: false, multivalued: true}

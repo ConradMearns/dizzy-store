@@ -1,0 +1,26 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    drive: {role: cold, site: shelf, wants: ['*'], location_note: garage shelf box 3}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {net: {offline: laptop}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- claim: {at: drive, blob: $photo-1, has: true}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: empty}
+
+# a drive in a box counts as a copy, but it may be unplugged tomorrow: it can
+# never be the reason the server drops its own
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+
+- {net: {online: laptop}}
+- sync: all
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim:
+    at: server
+    query: get_eviction_candidates
+    input: {node_id: server}
+    expect: {contains: [{blob_hashes: $photo-1}]}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: false}

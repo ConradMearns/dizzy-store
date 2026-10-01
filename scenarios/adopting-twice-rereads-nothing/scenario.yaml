@@ -1,0 +1,13 @@
+- cluster:
+    nas: {role: archive, site: attic, wants: ['*']}
+- tree: {at: nas, dir: legacy, layout: cas, files: {a.bin: 3KB, b.bin: 2KB}}
+- {at: nas, command: adopt_collection,
+   fields: {collection: legacy, root: $path:legacy, layout: cas}}
+- claim: {at: nas, blob: $legacy/a.bin, has: true}
+
+# the originals become unreadable; a re-run must not need to read what it already holds
+- edit: {at: nas, dir: legacy, file: a.bin, unreadable: true}
+- edit: {at: nas, dir: legacy, file: b.bin, unreadable: true}
+- {at: nas, command: adopt_collection,
+   fields: {collection: legacy, root: $path:legacy, layout: cas}}
+- claim: {at: nas, blob: $legacy/a.bin, has: true}

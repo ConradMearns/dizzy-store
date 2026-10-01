@@ -1,0 +1,23 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: ['*'], limit_bytes: 6KB, high_watermark: 0.7, low_watermark: 0.5}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: laptop, upload: "photo-{n}", count: 5, size: 2KB}
+- sync: all
+- sweep: server
+- sweep: server
+- {advance: 2h}
+- sweep: server
+- sweep: server
+- {advance: 2h}
+- sweep: server
+
+# three fit; the rest do not, and what the server WANTS is never dropped to make
+# room — it settles instead of fetching and evicting the same blobs forever
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 3}}}
+- claim: {at: server, blob: $photo-1, has: true}
+- claim: {at: server, blob: $photo-2, has: true}
+- claim: {at: server, blob: $photo-3, has: true}
+- claim: {at: server, blob: $photo-5, has: false}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: empty}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}

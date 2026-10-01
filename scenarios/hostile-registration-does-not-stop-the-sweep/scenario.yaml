@@ -1,0 +1,17 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 2KB}
+- {at: server, upload: photo-2, size: 2KB}
+- {advance: 1m}
+# the NEWEST fact on the log registers a "blob" whose hash is a filesystem path — junk
+# from a damaged or foreign log. The sweep reaches it first, and must not die there.
+- at: server
+  event: blob_registered
+  fields: {blob_hash: /etc/hostname, byte_size: 10, collection: photos,
+           occurred_at: '2026-01-01T00:01:00Z'}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim: {at: laptop, blob: $photo-2, has: true}

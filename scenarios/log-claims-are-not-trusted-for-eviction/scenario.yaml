@@ -1,0 +1,21 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- claim: {at: laptop, blob: $photo-1, has: true}
+
+# the laptop is awake and reachable — but its copy has silently vanished (a bad
+# disk, an accidental rm). Its LOG still says it holds the photo; the server's
+# view of that log is perfectly healthy. Only asking the laptop for the bytes
+# can reveal the truth.
+- fault: {at: laptop, remove: $photo-1}
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect: {contains: [{node_ids: laptop, states: present}]}
+
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}      # the live check refused: it was the LAST copy

@@ -1,0 +1,16 @@
+- cluster:
+    laptop: {role: archive, site: home, wants: ['*']}
+    nas: {role: archive, site: attic, wants: ['*']}
+- {at: laptop, upload: "doc-{n}", count: 4, size: 2KB, collection: docs}
+- sync: all
+- {fault: {at: laptop, unreadable: $doc-2}}
+- {fault: {at: laptop, remove: $doc-3}}
+- {at: laptop, command: scrub_blobs, fields: {collection: docs, max_bytes: 1MB}}
+# the pass COMPLETED: one unreadable and one missing blob are findings, not crashes —
+# neither is 'present' any more, so only the two healthy ones remain on the held list
+- claim: {at: laptop, query: get_blobs_held, input: {node_id: laptop, collection: docs}, expect: {count: 2}}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, blob: $doc-2, has: true}
+- claim: {at: laptop, blob: $doc-3, has: true}
+- claim: {at: laptop, query: get_at_risk_blobs, expect: empty}

@@ -1,0 +1,16 @@
+- cluster:
+    nas: {role: archive, site: attic, wants: ['*']}
+    laptop: {role: archive, site: home, wants: ['*']}
+- tree: {at: nas, dir: books, files: {a.txt: 3KB, b.txt: 2KB}}
+- {at: nas, command: adopt_collection,
+   fields: {collection: books, root: $path:books, layout: tree}}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, blob: $books/a.txt, has: true}
+
+# an editor saves over the original IN PLACE; the store's copy is its own bytes
+- edit: {at: nas, dir: books, file: a.txt}
+- claim: {at: nas, blob: $books/a.txt, has: true}
+- {at: nas, command: scrub_blobs, fields: {max_bytes: 1MB}}
+- sync: all
+- claim: {at: nas, query: get_at_risk_blobs, expect: empty}

@@ -1,0 +1,18 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    nas: {role: archive, site: attic, wants: ['*']}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {net: {offline: laptop}}
+- sync: all
+- {at: server, upload: movie, size: 4KB, chunk_size: 1KB, collection: video}
+- sync: all
+- claim: {at: nas, blob: $movie, has: true}
+
+# the server's copy rots: every 1 KB chunk of it has a flipped byte (same size)
+- {fault: {at: server, corrupt: $movie, every: 1KB}}
+
+# the laptop comes back; the server (which announced the blob) is asked first, and
+# every chunk it serves is bad — each must be refused and taken from the nas instead
+- {net: {online: laptop}}
+- sync: all
+- claim: {at: laptop, blob: $movie, has: true}

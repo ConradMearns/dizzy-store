@@ -1,0 +1,19 @@
+- cluster:
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: laptop, upload: "doc-{n}", count: 4, size: 2KB, collection: docs}
+- {at: laptop, upload: "pic-{n}", count: 2, size: 2KB, collection: photos}
+- {advance: 20d}
+# a pass over docs BEGINS on day 20 and takes two runs...
+- {at: laptop, command: scrub_blobs, fields: {collection: docs, max_bytes: 4KB}}
+- {advance: 20d}                                            # day 40
+- {at: laptop, command: scrub_blobs, fields: {collection: docs, max_bytes: 4KB}}   # ...ending on day 40
+- {advance: 5d}                                             # day 45
+# the pass STARTED 25 days ago, so docs are fresh; photos were never scrubbed, and their
+# day-0 stored_at is stale
+- claim: {at: laptop, query: get_at_risk_blobs, input: {collection: docs}, expect: empty}
+- claim: {at: laptop, query: get_at_risk_blobs, input: {collection: photos}, expect: {count: 2}}
+- claim: {at: laptop, query: get_at_risk_blobs, expect: {count: 2}}
+- {advance: 10d}                                            # day 55
+# 35 days after the pass began: no longer fresh — though it only ENDED on day 40.
+# (blobs verified at the start of a long pass must not look fresh until its end + 30d)
+- claim: {at: laptop, query: get_at_risk_blobs, input: {collection: docs}, expect: {count: 4}}

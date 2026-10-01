@@ -1,0 +1,28 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {net: {offline: laptop}}
+- {at: server, command: sync_peer, fields: {peer_id: laptop, direction: both}}
+- claim:
+    at: server
+    query: get_peer_link
+    input: {node_id: server, peer_id: laptop}
+    expect: {equals: {known: true, healthy: false, changed_at: '2026-01-01T00:00:00'}}
+
+# still down an hour later: not a transition, so nothing new is recorded
+- {advance: 1h}
+- {at: server, command: sync_peer, fields: {peer_id: laptop, direction: both}}
+- claim:
+    at: server
+    query: get_peer_link
+    input: {node_id: server, peer_id: laptop}
+    expect: {equals: {healthy: false, changed_at: '2026-01-01T00:00:00'}}
+
+- {net: {online: laptop}}
+- {at: server, command: sync_peer, fields: {peer_id: laptop, direction: both}}
+- claim:
+    at: server
+    query: get_peer_link
+    input: {node_id: server, peer_id: laptop}
+    expect: {equals: {healthy: true, changed_at: '2026-01-01T01:00:00'}}

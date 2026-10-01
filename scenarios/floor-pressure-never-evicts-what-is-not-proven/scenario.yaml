@@ -1,0 +1,19 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], disk_capacity: 30KB, disk_other: 10KB, min_free_bytes: 8KB}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: "photo-{n}", count: 6, size: 2KB}
+- sync: all
+- {net: {offline: laptop}}
+- {at: server, upload: photo-7, size: 2KB}
+- {at: server, command: check_capacity}
+# under the floor, but the only archive is away: pressure is not a licence to destroy the last copy
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 7}}}
+
+# the laptop returns, catches up, and only then may the server shed
+- {net: {online: laptop}}
+- sync: all
+- sweep: laptop
+- {at: server, command: check_capacity}
+- claim: {at: server, query: get_node_usage, input: {node_id: server}, expect: {equals: {held_count: 5}}}
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

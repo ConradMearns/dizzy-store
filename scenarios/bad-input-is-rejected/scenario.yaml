@@ -1,0 +1,13 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+- {at: server, command: create_cluster, fields: {cluster_id: another}, expect: rejects}
+- {at: server, command: announce_node, fields: {role: banana, site: x}, expect: rejects}
+- {at: server, command: announce_node, fields: {role: hot, site: ''}, expect: rejects}
+- {at: server, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 0, verify_max_age_days: 30, evictable: true},
+   expect: rejects}
+# the edge writes the bytes FIRST; recording a blob that is not there is refused
+- {at: server, command: put_blob,
+   fields: {blob_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            byte_size: 10, collection: photos},
+   expect: rejects}

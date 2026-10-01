@@ -1,0 +1,33 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: server, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}
+
+# the laptop's disk is replaced: every byte and fact of it is gone. Its old
+# claims live on in the server's log — as history, not as copies.
+- wipe: laptop
+- {advance: 2h}                  # long enough that its replayed history is stale news
+- announce: laptop               # the NEW life says hello (new epoch)
+- sync: all
+
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect: {count: 1, contains: [{node_ids: server}]}
+- claim:
+    at: server
+    query: get_at_risk_blobs
+    expect: {count: 1, contains: [{sites_holding: 1, sites_needed: 2}]}
+
+# stale history dispatches nothing; the paced sweep is what repairs it
+- claim: {at: laptop, blob: $photo-1, has: false}
+- sweep: laptop
+- claim: {at: laptop, blob: $photo-1, has: true}
+- sync: all
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

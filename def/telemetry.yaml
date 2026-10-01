@@ -1,0 +1,25 @@
+id: https://example.org/telemetry
+name: telemetry
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  progress:
+    description: Stage progress (stage, detail) for long steps and for quiet refusals — adopt walks, scrubs, capacity readings, log exchanges, evictions declined.
+    attributes:
+      stage: {range: string, required: true}
+      detail: {range: string, required: true}
+  transfer_progress:
+    description: Bytes moved for an in-flight transfer (blob_hash, peer_id, bytes_done, bytes_total), per chunk, so the UI can show a streaming fetch.
+    attributes:
+      blob_hash: {range: string, required: true}
+      peer_id: {range: string, required: true}
+      bytes_done: {range: integer, required: true}
+      bytes_total: {range: integer, required: true}
+  peer_health:
+    description: A peer's reachability as just observed (peer_id, reachable, latency_ms, detail). Transient by design; peer_link_changed records only the flips.
+    attributes:
+      peer_id: {range: string, required: true}
+      reachable: {range: boolean, required: true}
+      latency_ms: {range: integer, required: false}
+      detail: {range: string, required: false}

@@ -1,0 +1,18 @@
+id: https://example.org/queries/get_peer_link
+name: get_peer_link
+description: 'One link''s state (input: node_id, peer_id): healthy, changed_at; healthy=true for a link never seen.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetPeerLinkInput:
+    description: Input for get_peer_link
+    attributes:
+      node_id: {range: string, required: true}
+      peer_id: {range: string, required: true}
+  GetPeerLinkOutput:
+    description: Output for get_peer_link
+    attributes:
+      known: {range: boolean, required: true}
+      healthy: {range: boolean, required: true}
+      changed_at: {range: string, required: false, description: ISO 8601}

@@ -1,0 +1,20 @@
+- cluster:
+    a: {role: archive, site: s1, wants: ['*']}
+    b: {role: archive, site: s2, wants: ['*'], max_dispatch_per_event: 3}
+- sync: all
+- {net: {partition: [[a], [b]]}}
+- {at: a, upload: "photo-{n}", count: 12, size: 1KB}
+- {net: {heal: true}}
+
+# twelve FRESH blob_stored facts arrive in one merge: b reacts to a few of them,
+# not all (a laptop that was away must not fetch a whole backlog inside one sync)
+- sync: all
+- claim: {at: b, query: get_node_usage, input: {node_id: b}, expect: {equals: {held_count: 3}}}
+
+# the paced sweep does the rest, three at a time
+- sweep: b
+- claim: {at: b, query: get_node_usage, input: {node_id: b}, expect: {equals: {held_count: 6}}}
+- sweep: b
+- sweep: b
+- sweep: b
+- claim: {at: b, query: get_node_usage, input: {node_id: b}, expect: {equals: {held_count: 12}}}

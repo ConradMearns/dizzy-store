@@ -1,0 +1,21 @@
+- cluster:
+    nas: {role: archive, site: attic, wants: ['*']}
+    laptop: {role: archive, site: home, wants: ['*']}
+- tree: {at: nas, dir: books, files: {a.txt: 3KB, b.txt: 2KB}}
+- {at: nas, command: adopt_collection,
+   fields: {collection: books, root: $path:books, layout: tree, link: true}}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, blob: $books/a.txt, has: true}
+
+# link: true was the owner's promise that nothing edits the tree in place.
+# Break it, and the blob shares the damage...
+- edit: {at: nas, dir: books, file: a.txt}
+- claim: {at: nas, blob: $books/a.txt, has: false}
+
+# ...but an address cannot lie for long: scrub finds it, a peer repairs it.
+- {at: nas, command: scrub_blobs, fields: {max_bytes: 1MB}}
+- sync: all
+- sweep: nas
+- claim: {at: nas, blob: $books/a.txt, has: true}
+- claim: {at: nas, query: get_at_risk_blobs, expect: empty}

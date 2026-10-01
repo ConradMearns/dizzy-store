@@ -1,0 +1,88 @@
+id: https://example.org/commands
+name: commands
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  create_cluster:
+    description: 'Found the cluster: carries a generated cluster_id and occurred_at. Issued once by the first device; every other device joins by being configured with the cluster_id and syncing.'
+    attributes:
+      cluster_id: {range: string, required: true}
+      occurred_at: {range: datetime, required: true}
+  announce_node:
+    description: 'Declare or update this node''s public card (its identity — node_id, cluster_id and epoch, this life''s random id — comes from env.store): role (''hot'' — small, keeps what is recent or likely read, the only role that evicts under pressure; ''archive'' — big, keeps what it wants; ''cold'' — a drive only sometimes online, fills when plugged in, never evicts), site, location_note (free text: "garage shelf, box 3"), endpoints (urls), wants (collections it wants in full, or [''*'']), and draining (being retired: never a replication target or anchor, evicts what is safely elsewhere; re-announce with false to cancel). Issued by the host at startup and on config change; the latest wins.'
+    attributes:
+      role: {range: string, required: true, description: '''hot'' | ''archive'' | ''cold'''}
+      site: {range: string, required: true}
+      location_note: {range: string, required: false}
+      endpoints: {range: string, required: false, multivalued: true, description: urls peers can reach this node at}
+      wants: {range: string, required: false, multivalued: true, description: 'collections wanted in full, or [''*'']'}
+      draining: {range: boolean, required: false, description: being retired; absent means false}
+      occurred_at: {range: datetime, required: true}
+  set_collection_policy:
+    description: 'Declare a collection''s policy: min_sites (distinct sites that must hold a verified copy), verify_max_age_days, and evictable (whether hot nodes may drop its bytes). Issued by the host (UI/CLI); the latest wins.'
+    attributes:
+      collection: {range: string, required: true}
+      min_sites: {range: integer, required: true}
+      verify_max_age_days: {range: integer, required: true}
+      evictable: {range: boolean, required: true}
+      occurred_at: {range: datetime, required: true}
+  put_blob:
+    description: 'Record a blob the edge has ALREADY written under this node''s root: sha256 blob_hash, byte_size and collection — never the bytes, never metadata — plus, for a large file, chunk_size and the ordered chunk_hashes. The edge hashes while streaming the upload, before dispatching.'
+    attributes:
+      blob_hash: {range: string, required: true, description: sha256 hex}
+      byte_size: {range: integer, required: true}
+      collection: {range: string, required: true}
+      chunk_size: {range: integer, required: false, description: large files only}
+      chunk_hashes: {range: string, required: false, multivalued: true, description: ordered chunk sha256 hexes; large files only}
+      occurred_at: {range: datetime, required: true}
+  adopt_collection:
+    description: 'Bring an existing directory under management WITHOUT touching it: record every file as a blob this node holds. Carries collection, root and layout (''cas'' — a sharded <aa>/<bb>/<sha256> tree whose names are CLAIMED to be the hashes; ''tree'' — arbitrary files; paths are not kept) and, optionally, link: true. Every new file is HASHED on the way in: one whose bytes do not match its name is skipped and reported, never recorded. By default each file is COPIED into this node''s root, so the original can be edited or deleted without touching the store; link: true hard-links instead (same filesystem only, falling back to a copy) for a tree that nothing edits in place — it costs no extra space, and frees none when the store evicts. Issued by the host.'
+    attributes:
+      collection: {range: string, required: true}
+      root: {range: string, required: true}
+      layout: {range: string, required: true, description: '''cas'' | ''tree'''}
+      link: {range: boolean, required: false, description: hard-link instead of copy (same filesystem; for trees nothing edits in place)}
+      occurred_at: {range: datetime, required: true}
+  replicate_blob:
+    description: 'Fetch one blob (a whole file, however chunked) from peers. Carries blob_hash, an OPTIONAL from_node, and a reason: ''replica'' (a policy reacted to a fresh blob_stored), ''backfill'' (the host sweep — this also repairs corrupt or missing copies) or ''read_through'' (an edge miss).'
+    attributes:
+      blob_hash: {range: string, required: true}
+      from_node: {range: string, required: false}
+      reason: {range: string, required: true, description: '''replica'' | ''backfill'' | ''read_through'''}
+      occurred_at: {range: datetime, required: true}
+  evict_blob:
+    description: Drop this node's bytes for one blob; it stays registered and held elsewhere. Carries blob_hash and a reason ('pressure' | 'drain').
+    attributes:
+      blob_hash: {range: string, required: true}
+      reason: {range: string, required: true, description: '''pressure'' | ''drain'''}
+      occurred_at: {range: datetime, required: true}
+  set_blob_pin:
+    description: Keep (or release) this node's bytes for a blob regardless of pressure — a favorite, a book being read. Carries blob_hash, pinned, optional reason. Issued by the host.
+    attributes:
+      blob_hash: {range: string, required: true}
+      pinned: {range: boolean, required: true}
+      reason: {range: string, required: false}
+      occurred_at: {range: datetime, required: true}
+  record_blob_access:
+    description: 'Flush the edge''s coalesced read times (one event per read would flood the log): a batch of (blob_hash, last_access_at). Issued by the host periodically; drives LRU eviction.'
+    attributes:
+      blob_hashes: {range: string, required: true, multivalued: true, description: parallel with last_access_ats}
+      last_access_ats: {range: datetime, required: true, multivalued: true}
+      occurred_at: {range: datetime, required: true}
+  check_capacity:
+    description: Measure this node's storage use against its limit and watermarks. Carries nothing. Issued by the host on a cron tick and after large puts.
+    attributes:
+      occurred_at: {range: datetime, required: true}
+  sync_peer:
+    description: Exchange logs with one peer. Carries peer_id and direction ('pull' | 'push' — ask the peer to pull from this node | 'both'). Issued by the host (cron) and by policy when a peer announces.
+    attributes:
+      peer_id: {range: string, required: true}
+      direction: {range: string, required: true, description: '''pull'' | ''push'' | ''both'''}
+      occurred_at: {range: datetime, required: true}
+  scrub_blobs:
+    description: Integrity sweep over this node's held blobs. Carries an optional collection and max_bytes (this run's budget). Issued by the host on a slow cron.
+    attributes:
+      collection: {range: string, required: false}
+      max_bytes: {range: integer, required: true}
+      occurred_at: {range: datetime, required: true}

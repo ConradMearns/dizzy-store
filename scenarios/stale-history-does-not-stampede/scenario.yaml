@@ -1,0 +1,21 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*'], max_dispatch_per_event: 5}
+- sync: all
+- {net: {offline: laptop}}
+- {at: server, upload: "photo-{n}", count: 12, size: 1KB}
+- {advance: 3d}
+- {net: {online: laptop}}
+- sync: all
+
+# twelve blobs were stored while it slept — but that is history by now, so the
+# policies dispatch NOTHING (no thundering herd)
+- claim: {at: laptop, query: get_missing_blobs, input: {node_id: laptop}, expect: {count: 12}}
+
+# the paced sweep catches up at most 5 per tick
+- sweep: laptop
+- claim: {at: laptop, query: get_missing_blobs, input: {node_id: laptop}, expect: {count: 7}}
+- sweep: laptop
+- claim: {at: laptop, query: get_missing_blobs, input: {node_id: laptop}, expect: {count: 2}}
+- sweep: laptop
+- claim: {at: laptop, query: get_missing_blobs, input: {node_id: laptop}, expect: empty}

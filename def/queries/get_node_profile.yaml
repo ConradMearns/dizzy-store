@@ -1,0 +1,25 @@
+id: https://example.org/queries/get_node_profile
+name: get_node_profile
+description: 'One node''s card (input: node_id): role, site, epoch, location_note, endpoints, wants, draining, announced_at; found flag.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetNodeProfileInput:
+    description: Input for get_node_profile
+    attributes:
+      node_id: {range: string, required: true}
+  GetNodeProfileOutput:
+    description: Output for get_node_profile
+    attributes:
+      found: {range: boolean, required: true}
+      node_id: {range: string, required: false}
+      cluster_id: {range: string, required: false}
+      epoch: {range: string, required: false}
+      role: {range: string, required: false}
+      site: {range: string, required: false}
+      location_note: {range: string, required: false}
+      endpoints: {range: string, required: false, multivalued: true}
+      wants: {range: string, required: false, multivalued: true}
+      draining: {range: boolean, required: false}
+      announced_at: {range: string, required: false, description: ISO 8601}

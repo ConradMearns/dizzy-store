@@ -1,0 +1,23 @@
+id: https://example.org/queries/list_peers
+name: list_peers
+description: Every known node except a given node_id, with its card — the peer set for the host's sync sweep.
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  ListPeersInput:
+    description: Input for list_peers
+    attributes:
+      node_id: {range: string, required: true, description: the node to exclude (this one)}
+  ListPeersOutput:
+    description: Output for list_peers
+    attributes:
+      node_ids: {range: string, required: false, multivalued: true}
+      cluster_ids: {range: string, required: false, multivalued: true}
+      epochs: {range: string, required: false, multivalued: true}
+      roles: {range: string, required: false, multivalued: true}
+      sites: {range: string, required: false, multivalued: true}
+      location_notes: {range: string, required: false, multivalued: true}
+      endpoints_jsons: {range: string, required: false, multivalued: true, description: JSON list per node}
+      wants_jsons: {range: string, required: false, multivalued: true, description: JSON list per node}
+      drainings: {range: boolean, required: false, multivalued: true}

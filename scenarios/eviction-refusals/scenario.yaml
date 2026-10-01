@@ -1,0 +1,43 @@
+- cluster:
+    server: {role: hot, site: h, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+    nas: {role: archive, site: attic, wants: ['*']}
+    drive: {role: cold, site: shelf, wants: ['*']}
+    shed: {role: archive, site: shed, wants: []}      # an archive that took ONE blob and wants nothing in full
+- {at: server, command: set_collection_policy,
+   fields: {collection: legal, min_sites: 1, verify_max_age_days: 30, evictable: false}}
+- sync: all
+- {at: server, upload: photo-1, size: 2KB}
+- {at: server, upload: contract, size: 2KB, collection: legal}
+- {at: shed, upload: photo-0, size: 2KB}
+- sync: all
+
+# an archive never evicts under pressure — even one that does not want the blob
+- {at: laptop, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- {at: shed, command: evict_blob, fields: {blob_hash: $photo-0, reason: pressure}}
+# a node that is not draining never evicts to drain
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: drain}}
+# an unknown reason is not a licence
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: whim}}
+# a cold drive never evicts
+- {at: drive, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+# a non-evictable collection is never dropped
+- {at: server, command: evict_blob, fields: {blob_hash: $contract, reason: pressure}}
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim: {at: shed, blob: $photo-0, has: true}
+- claim: {at: server, blob: $photo-1, has: true}
+- claim: {at: drive, blob: $photo-1, has: true}
+- claim: {at: server, blob: $contract, has: true}
+
+# the candidate lists agree: only a hot node (or a draining one) has any
+- claim: {at: drive, query: get_eviction_candidates, input: {node_id: drive}, expect: empty}
+- claim: {at: laptop, query: get_eviction_candidates, input: {node_id: laptop}, expect: empty}
+- claim: {at: shed, query: get_eviction_candidates, input: {node_id: shed}, expect: empty}   # an archive that wants nothing: the ROLE alone
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: {not_contains: [{blob_hashes: $contract}]}}
+
+# not even a DRAINING cold drive: unplugging a box is not evicting
+- {announce: {node: drive, draining: true}}
+- sync: all
+- {at: drive, command: evict_blob, fields: {blob_hash: $photo-1, reason: drain}}
+- claim: {at: drive, blob: $photo-1, has: true}
+- claim: {at: drive, query: get_eviction_candidates, input: {node_id: drive}, expect: empty}

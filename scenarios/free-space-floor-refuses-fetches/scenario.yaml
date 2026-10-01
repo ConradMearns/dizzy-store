@@ -1,0 +1,15 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    # a 20 KB filesystem shared with 2 KB of other things, and a floor of 6 KB
+    laptop: {role: archive, site: home, wants: ['*'], disk_capacity: 20KB, disk_other: 2KB, min_free_bytes: 6KB}
+- sync: all
+- {at: server, upload: "photo-{n}", count: 8, size: 2KB}
+- sync: all
+- sweep: laptop
+- sweep: laptop
+
+# 18 KB are usable and 6 KB must stay free: six 2 KB blobs fit, the seventh would cross the floor.
+# The device's own limit (1 GB) was nowhere near binding — the FILESYSTEM was.
+- claim: {at: laptop, query: get_node_usage, input: {node_id: laptop}, expect: {equals: {held_count: 6}}}
+# nothing is lost or even at risk: the server still holds all eight
+- claim: {at: laptop, query: get_at_risk_blobs, expect: empty}

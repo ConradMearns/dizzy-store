@@ -1,0 +1,23 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 2KB}
+- sync: all
+
+# the laptop starts to drain — but the server has not heard: its LOG still says
+# "a healthy archive". The proof the server asks for is the laptop's own live word.
+- {announce: {node: laptop, draining: true}}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+
+# ...then it is reclassified as a cold drive; still unheard
+- {announce: {node: laptop, draining: false, role: cold}}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+
+# an honest archive again: now the server may leave
+- {announce: {node: laptop, role: archive}}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: false}
+- claim: {at: laptop, blob: $photo-1, has: true}

@@ -1,0 +1,84 @@
+# Dizzy library configuration — assign runtimes to each element
+# Supported runtimes: python-uv | rust-cargo | typescript-npm
+
+procedures:
+  create_cluster:
+    runtimes: [python-uv]
+  announce_node:
+    runtimes: [python-uv]
+  set_collection_policy:
+    runtimes: [python-uv]
+  put_blob:
+    runtimes: [python-uv]
+  adopt_collection:
+    runtimes: [python-uv]
+  replicate_blob:
+    runtimes: [python-uv]
+  evict_blob:
+    runtimes: [python-uv]
+  set_blob_pin:
+    runtimes: [python-uv]
+  record_blob_access:
+    runtimes: [python-uv]
+  check_capacity:
+    runtimes: [python-uv]
+  sync_peer:
+    runtimes: [python-uv]
+  scrub_blobs:
+    runtimes: [python-uv]
+
+policies:
+  replicate_on_peer_blob_stored:
+    runtimes: [python-uv]
+  evict_on_space_pressure:
+    runtimes: [python-uv]
+  sync_on_node_announced:
+    runtimes: [python-uv]
+
+queries:
+  get_node_usage:
+    runtimes: [python-uv]
+  get_node_profile:
+    runtimes: [python-uv]
+  list_peers:
+    runtimes: [python-uv]
+  get_collection_policy:
+    runtimes: [python-uv]
+  get_blob:
+    runtimes: [python-uv]
+  get_blob_replicas:
+    runtimes: [python-uv]
+  get_missing_blobs:
+    runtimes: [python-uv]
+  get_eviction_candidates:
+    runtimes: [python-uv]
+  get_at_risk_blobs:
+    runtimes: [python-uv]
+  get_drain_remaining:
+    runtimes: [python-uv]
+  get_blobs_held:
+    runtimes: [python-uv]
+  get_peer_link:
+    runtimes: [python-uv]
+
+projections:
+  node_upsert:
+    runtimes: [python-uv]
+  collection_policy_upsert:
+    runtimes: [python-uv]
+  blob_catalog_store:
+    runtimes: [python-uv]
+  blob_location_present:
+    runtimes: [python-uv]
+  blob_location_evicted:
+    runtimes: [python-uv]
+  blob_location_corrupt:
+    runtimes: [python-uv]
+  blob_location_pin:
+    runtimes: [python-uv]
+  blob_access_fold:
+    runtimes: [python-uv]
+  scrub_state_store:
+    runtimes: [python-uv]
+  peer_link_upsert:
+    runtimes: [python-uv]

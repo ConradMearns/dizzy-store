@@ -1,0 +1,17 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 2KB}
+- {at: server, upload: photo-2, size: 2KB}
+- sync: all
+- {at: server, command: set_blob_pin, fields: {blob_hash: $photo-1, pinned: true}}
+- claim:
+    at: server
+    query: get_eviction_candidates
+    input: {node_id: server}
+    expect:
+      contains: [{blob_hashes: $photo-2}]
+      not_contains: [{blob_hashes: $photo-1}]
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}

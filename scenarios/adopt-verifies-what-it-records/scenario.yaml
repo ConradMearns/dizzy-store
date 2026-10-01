@@ -1,0 +1,27 @@
+- cluster:
+    nas: {role: archive, site: attic, wants: ['*']}
+    laptop: {role: archive, site: home, wants: ['*']}
+
+# a legacy content-addressed tree: two honest files and one whose name LIES (it holds
+# half the bytes its name claims) — and a book whose address already holds half a file
+- tree: {at: nas, dir: legacy, layout: cas, files: {a.bin: 3KB, b.bin: 2KB, lie.bin: 4KB},
+         truncate: [lie.bin]}
+- tree: {at: nas, dir: books, files: {c.txt: 1KB}, stray: [c.txt]}
+- {at: nas, command: adopt_collection,
+   fields: {collection: legacy, root: $path:legacy, layout: cas}}
+- {at: nas, command: adopt_collection,
+   fields: {collection: books, root: $path:books, layout: tree}}
+- sync: all
+- sweep: laptop
+
+# what hashes right is recorded; the lie is skipped and never becomes a fact
+- claim: {at: nas, blob: $legacy/a.bin, has: true}
+- claim: {at: nas, blob: $legacy/b.bin, has: true}
+- claim: {at: nas, blob: $legacy/lie.bin, has: false}
+- claim: {at: nas, query: get_blob, input: {blob_hash: $legacy/lie.bin}, expect: {equals: {found: false}}}
+# the half-file at the book's address is not "a verified copy": it was replaced
+- claim: {at: nas, blob: $books/c.txt, has: true}
+- claim: {at: laptop, blob: $legacy/a.bin, has: true}
+- claim: {at: laptop, blob: $books/c.txt, has: true}
+- claim: {at: nas, query: get_node_usage, input: {node_id: nas}, expect: {equals: {held_count: 3}}}
+- claim: {at: nas, query: get_at_risk_blobs, expect: empty}

@@ -1,0 +1,15 @@
+- cluster:
+    a: {role: archive, site: s1, wants: ['*']}
+    b: {role: archive, site: s2, wants: ['*']}
+- sync: all
+- {net: {partition: [[a], [b]]}}
+# two devices set DIFFERENT policies for one collection at the very same instant
+- {at: a, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- {at: b, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 3, verify_max_age_days: 30, evictable: true}}
+- {net: {heal: true}}
+# after the merge both must hold the SAME policy, whichever order each folded them in.
+# Which one wins is arbitrary (a hash); that they AGREE is the law, and the runner's
+# models-converge / confluent-folds invariants check it after this step.
+- sync: all

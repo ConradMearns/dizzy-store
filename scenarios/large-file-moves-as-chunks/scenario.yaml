@@ -1,0 +1,12 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: movie, size: 5KB, chunk_size: 1KB, collection: video}
+- claim:
+    at: server
+    query: get_blob
+    input: {blob_hash: $movie}
+    expect: {equals: {found: true, chunk_size: 1024, byte_size: 5120}}
+- sync: all
+- claim: {at: laptop, blob: $movie, has: true}

@@ -1,0 +1,22 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+
+# the clock does not move between these: a device's own LATER announcement must
+# still beat its earlier one (a tie on occurred_at is not allowed to decide it)
+- announce: {node: laptop, draining: true}
+- sync: all
+- claim:
+    at: server
+    query: list_peers
+    input: {node_id: server}
+    expect: {contains: [{node_ids: laptop, drainings: true}]}
+
+- announce: {node: laptop, draining: false}
+- sync: all
+- claim:
+    at: server
+    query: list_peers
+    input: {node_id: server}
+    expect: {contains: [{node_ids: laptop, drainings: false}]}

@@ -1,0 +1,24 @@
+id: https://example.org/queries/get_blob_replicas
+name: get_blob_replicas
+description: 'Who holds a blob (input: blob_hash): every location — node_id, state, epoch, pinned, stored_at, last_access_at, verified_at (stored, or the last full scrub pass if later) — with its node''s role, site and draining flag. Only locations under the node''s CURRENT epoch are returned — a superseded life''s claims stop counting. The single answer to "who has X?" and the idempotency check for put, adopt, replicate and pin.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetBlobReplicasInput:
+    description: Input for get_blob_replicas
+    attributes:
+      blob_hash: {range: string, required: true}
+  GetBlobReplicasOutput:
+    description: Output for get_blob_replicas
+    attributes:
+      node_ids: {range: string, required: false, multivalued: true}
+      epochs: {range: string, required: false, multivalued: true}
+      states: {range: string, required: false, multivalued: true}
+      pinneds: {range: boolean, required: false, multivalued: true}
+      stored_ats: {range: string, required: false, multivalued: true, description: ISO 8601}
+      last_access_ats: {range: string, required: false, multivalued: true, description: 'ISO 8601, empty when never read'}
+      roles: {range: string, required: false, multivalued: true}
+      sites: {range: string, required: false, multivalued: true}
+      drainings: {range: boolean, required: false, multivalued: true}
+      verified_ats: {range: string, required: false, multivalued: true, description: 'ISO 8601 — stored, or the last full scrub pass if later'}

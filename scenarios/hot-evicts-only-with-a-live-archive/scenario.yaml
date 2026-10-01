@@ -1,0 +1,18 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+- claim: {at: laptop, blob: $photo-1, has: true}
+
+# the laptop goes to sleep: the log still says it holds the photo, but the
+# server cannot PROVE it right now, so it must not drop its own copy
+- {net: {offline: laptop}}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: true}
+
+- {net: {online: laptop}}
+- {at: server, command: evict_blob, fields: {blob_hash: $photo-1, reason: pressure}}
+- claim: {at: server, blob: $photo-1, has: false}
+- claim: {at: laptop, blob: $photo-1, has: true}

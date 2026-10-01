@@ -1,0 +1,10 @@
+- cluster:
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: laptop, upload: "doc-{n}", count: 4, size: 2KB, collection: docs}
+- {advance: 25d}
+- {at: laptop, command: scrub_blobs, fields: {collection: docs, max_bytes: 4KB}}   # exactly 2 of 4: budget reached, pass NOT complete
+- claim: {at: laptop, query: get_blobs_held, input: {node_id: laptop, collection: docs}, expect: {count: 2}}  # resumes after the cursor
+- {advance: 10d}                                          # day 35: stored_at (day 0) is stale; half a pass vouches for nothing
+- claim: {at: laptop, query: get_at_risk_blobs, expect: {count: 4}}
+- {at: laptop, command: scrub_blobs, fields: {collection: docs, max_bytes: 4KB}}   # finishes the pass
+- claim: {at: laptop, query: get_at_risk_blobs, expect: empty}

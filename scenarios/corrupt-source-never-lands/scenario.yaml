@@ -1,0 +1,13 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- {fault: {at: server, corrupt: $photo-1}}               # the only copy rots before anyone fetches it (same size, one byte flipped)
+- sync: all                                              # the laptop's policy fetches it and must REFUSE the bytes
+- claim: {at: laptop, blob: $photo-1, has: false}
+- claim:
+    at: laptop
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect: {not_contains: [{node_ids: laptop, states: present}]}

@@ -1,0 +1,122 @@
+id: https://example.org/events
+name: events
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  cluster_created:
+    description: '[cluster] The cluster was founded (cluster_id, created_by — node_id, occurred_at). The log is self-describing: a surviving log alone names the cluster.'
+    attributes:
+      cluster_id: {range: string, required: true}
+      created_by: {range: string, required: true}
+      occurred_at: {range: datetime, required: true}
+  node_announced:
+    description: '[cluster] A node''s public card (node_id, cluster_id, epoch, role, site, location_note, endpoints, wants, draining, occurred_at). Latest occurred_at per node_id wins (ties: payload digest); its epoch is the node''s CURRENT life — locations claimed under any other epoch stop counting.'
+    attributes:
+      node_id: {range: string, required: true}
+      cluster_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      role: {range: string, required: true}
+      site: {range: string, required: true}
+      location_note: {range: string, required: false}
+      endpoints: {range: string, required: false, multivalued: true}
+      wants: {range: string, required: false, multivalued: true}
+      draining: {range: boolean, required: false}
+      occurred_at: {range: datetime, required: true}
+  collection_policy_set:
+    description: '[cluster] A collection''s policy (collection, min_sites, verify_max_age_days, evictable, occurred_at). Latest occurred_at per collection wins (ties: payload digest).'
+    attributes:
+      collection: {range: string, required: true}
+      min_sites: {range: integer, required: true}
+      verify_max_age_days: {range: integer, required: true}
+      evictable: {range: boolean, required: true}
+      occurred_at: {range: datetime, required: true}
+  blob_registered:
+    description: '[cluster] A blob EXISTS in the cluster (blob_hash, byte_size, collection, occurred_at — and, for a large file only, chunk_size and the ordered chunk_hashes, the recipe peers fetch it by), whoever holds it. Recorded by whichever device first puts or adopts it; a set — the first wins, a later one carrying chunking may fill it in if absent.'
+    attributes:
+      blob_hash: {range: string, required: true}
+      byte_size: {range: integer, required: true}
+      collection: {range: string, required: true}
+      chunk_size: {range: integer, required: false}
+      chunk_hashes: {range: string, required: false, multivalued: true}
+      occurred_at: {range: datetime, required: true}
+  blob_stored:
+    description: '[device] A node holds the COMPLETE, verified blob (node_id, epoch, blob_hash, source — ''upload'' | ''adopted'' | ''replica'' | ''backfill'' | ''read_through'', occurred_at). For a chunked file, recorded only once it is assembled. Also the replication request: peers'' policies react to it. Size and collection come from blob_registered.'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      blob_hash: {range: string, required: true}
+      source: {range: string, required: true, description: '''upload'' | ''adopted'' | ''replica'' | ''backfill'' | ''read_through'''}
+      occurred_at: {range: datetime, required: true}
+  blob_evicted:
+    description: '[device] A node dropped its bytes (node_id, epoch, blob_hash, reason, confirmed_sites — how many other sites were confirmed holding it, occurred_at). The blob lives on elsewhere.'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      blob_hash: {range: string, required: true}
+      reason: {range: string, required: true}
+      confirmed_sites: {range: integer, required: true}
+      occurred_at: {range: datetime, required: true}
+  blob_pin_set:
+    description: '[device] A node pinned or unpinned a blob (node_id, epoch, blob_hash, pinned, reason, occurred_at).'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      blob_hash: {range: string, required: true}
+      pinned: {range: boolean, required: true}
+      reason: {range: string, required: false}
+      occurred_at: {range: datetime, required: true}
+  blob_access_recorded:
+    description: '[device] A batch of read times (node_id, epoch, accesses — list of blob_hash / last_access_at, occurred_at). The only access fact.'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      blob_hashes: {range: string, required: true, multivalued: true}
+      last_access_ats: {range: datetime, required: true, multivalued: true}
+      occurred_at: {range: datetime, required: true}
+  blob_corrupt:
+    description: '[device] A node''s copy is bad (node_id, epoch, blob_hash, found_hash — absent when the file is missing or unreadable, occurred_at). The file is quarantined; repair is the sweep''s job.'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      blob_hash: {range: string, required: true}
+      found_hash: {range: string, required: false}
+      occurred_at: {range: datetime, required: true}
+  blob_replication_failed:
+    description: '[device] A fetch did not yield a verified blob (node_id, blob_hash, from_node, reason — ''not_held'' | ''hash_mismatch'' | ''out_of_space'', occurred_at). Unreachable peers are peer_link_changed, not this. A hash_mismatch is also a signal about the SOURCE node.'
+    attributes:
+      node_id: {range: string, required: true}
+      blob_hash: {range: string, required: true}
+      from_node: {range: string, required: false}
+      reason: {range: string, required: true, description: '''not_held'' | ''hash_mismatch'' | ''out_of_space'''}
+      occurred_at: {range: datetime, required: true}
+  space_pressure_detected:
+    description: '[device] A node is over its high watermark or under its free-space floor (node_id, used_bytes — held blobs, limit_bytes, free_bytes — the filesystem''s room left, bytes_to_free — to reach the low watermark and to restore the floor with a quarter of it to spare, whichever is more, occurred_at). Emitted only when under pressure.'
+    attributes:
+      node_id: {range: string, required: true}
+      used_bytes: {range: integer, required: true}
+      limit_bytes: {range: integer, required: true}
+      free_bytes: {range: integer, required: false, description: the filesystem's room left when it was read}
+      bytes_to_free: {range: integer, required: true}
+      occurred_at: {range: datetime, required: true}
+  scrub_completed:
+    description: '[device] A scrub run finished (node_id, epoch, collection, checked, corrupt, bytes_checked, cursor — where the next run resumes (empty after a finished pass), pass_complete — the end was reached, so every held blob was verified at some point since pass_started_at, pass_started_at — when this pass began, occurred_at). Each bad blob also gets its own blob_corrupt.'
+    attributes:
+      node_id: {range: string, required: true}
+      epoch: {range: string, required: true}
+      collection: {range: string, required: false}
+      checked: {range: integer, required: true}
+      corrupt: {range: integer, required: true}
+      bytes_checked: {range: integer, required: true}
+      cursor: {range: string, required: false}
+      pass_complete: {range: boolean, required: true}
+      pass_started_at: {range: datetime, required: false}
+      occurred_at: {range: datetime, required: true}
+  peer_link_changed:
+    description: '[device] A node''s link to a peer flipped (node_id, peer_id, healthy, reason, occurred_at). Recorded on transitions only; an unknown link counts as healthy, so the first failure is a transition.'
+    attributes:
+      node_id: {range: string, required: true}
+      peer_id: {range: string, required: true}
+      healthy: {range: boolean, required: true}
+      reason: {range: string, required: false}
+      occurred_at: {range: datetime, required: true}

@@ -1,0 +1,25 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: server, command: set_collection_policy,
+   fields: {collection: photos, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- sync: all
+- {at: server, upload: photo-1, size: 4KB}
+- sync: all
+
+- fault: {at: laptop, corrupt: $photo-1}          # bit rot in a box
+- claim: {at: laptop, blob: $photo-1, has: false}  # the bytes no longer match
+- {at: laptop, command: scrub_blobs, fields: {max_bytes: 1MB}}
+- sync: all
+
+- claim:
+    at: server
+    query: get_blob_replicas
+    input: {blob_hash: $photo-1}
+    expect: {contains: [{node_ids: laptop, states: corrupt}]}
+- claim: {at: server, query: get_at_risk_blobs, expect: {count: 1}}
+
+- sweep: laptop                                    # missing includes corrupt: re-fetch
+- claim: {at: laptop, blob: $photo-1, has: true}
+- sync: all
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}

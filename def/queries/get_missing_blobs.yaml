@@ -1,0 +1,19 @@
+id: https://example.org/queries/get_missing_blobs
+name: get_missing_blobs
+description: 'Registered blobs a node should hold but does not (input: node_id, limit, order ''newest'' | ''smallest''): in a collection it wants (''*'' = all), or pinned on it, with no ''present'' location on it — so corrupt and evicted copies, and a wiped device''s old claims, count as missing. Reader: the host''s paced sweep.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetMissingBlobsInput:
+    description: Input for get_missing_blobs
+    attributes:
+      node_id: {range: string, required: true}
+      limit: {range: integer, required: false}
+      order: {range: string, required: false, description: '''newest'' (default) | ''smallest'''}
+  GetMissingBlobsOutput:
+    description: Output for get_missing_blobs
+    attributes:
+      blob_hashes: {range: string, required: false, multivalued: true}
+      byte_sizes: {range: integer, required: false, multivalued: true}
+      collections: {range: string, required: false, multivalued: true}

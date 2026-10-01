@@ -1,0 +1,16 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- tree: {at: server, dir: books, files: {a.txt: 3KB, b.txt: 5KB, nested/c.txt: 1KB}}
+- {at: server, command: adopt_collection,
+   fields: {collection: books, root: $path:books, layout: tree}}
+- claim:
+    at: server
+    query: get_blob
+    input: {blob_hash: $books/b.txt}
+    expect: {equals: {found: true, collection: books, byte_size: 5120}}
+- sync: all
+- claim: {at: laptop, blob: $books/a.txt, has: true}
+- claim: {at: laptop, blob: $books/b.txt, has: true}
+- claim: {at: laptop, blob: $books/nested/c.txt, has: true}

@@ -1,0 +1,27 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+- {at: server, upload: photo-1, size: 4KB}
+# a recipe that could never be used (two junk hashes for a 4 KB file in 1 KB chunks,
+# which needs four) arrives on the log, as a replicated fact
+- at: server
+  event: blob_registered
+  fields:
+    blob_hash: $photo-1
+    byte_size: 4096
+    collection: photos
+    chunk_size: 1024
+    chunk_hashes: ['0000000000000000000000000000000000000000000000000000000000000000',
+                   '1111111111111111111111111111111111111111111111111111111111111111']
+    occurred_at: '2026-01-01T00:00:01Z'
+- sync: all
+- sweep: laptop
+# ...and is ignored: the file is fetched whole and verified against its address
+- claim: {at: laptop, blob: $photo-1, has: true}
+- claim: {at: server, query: get_at_risk_blobs, expect: empty}
+
+# nor can one be PUT
+- {at: server, command: put_blob, expect: rejects,
+   fields: {blob_hash: '2222222222222222222222222222222222222222222222222222222222222222',
+            byte_size: 4096, collection: photos, chunk_size: 0,
+            chunk_hashes: ['3333333333333333333333333333333333333333333333333333333333333333']}}

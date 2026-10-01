@@ -1,0 +1,18 @@
+- cluster:
+    a: {role: archive, site: s1, wants: ['*']}
+    b: {role: archive, site: s2, wants: ['*']}
+    c: {role: archive, site: s3, wants: ['*']}
+- sync: all
+# a and b can talk, b and c can talk, a and c cannot
+- {net: {partition: [[a, b], [b, c]]}}
+- {at: c, command: set_collection_policy,
+   fields: {collection: docs, min_sites: 2, verify_max_age_days: 30, evictable: true}}
+- {at: b, command: sync_peer, fields: {peer_id: c, direction: pull}}
+- {at: a, command: sync_peer, fields: {peer_id: b, direction: pull}}
+
+# c's fact reached a without a ever talking to c: b relayed it
+- claim:
+    at: a
+    query: get_collection_policy
+    input: {collection: docs}
+    expect: {equals: {declared: true, min_sites: 2}}

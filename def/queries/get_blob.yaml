@@ -1,0 +1,21 @@
+id: https://example.org/queries/get_blob
+name: get_blob
+description: 'A blob''s catalog row (input: blob_hash): byte_size, collection, first_seen_at, and chunk_size + ordered chunk_hashes when chunked; found flag (false means new to the cluster). Also the chunk recipe replicate_blob and the edge''s streaming read follow.'
+prefixes: {linkml: 'https://w3id.org/linkml/'}
+default_range: string
+imports: ['linkml:types']
+classes:
+  GetBlobInput:
+    description: Input for get_blob
+    attributes:
+      blob_hash: {range: string, required: true}
+  GetBlobOutput:
+    description: Output for get_blob
+    attributes:
+      found: {range: boolean, required: true}
+      blob_hash: {range: string, required: false}
+      byte_size: {range: integer, required: false}
+      collection: {range: string, required: false}
+      first_seen_at: {range: string, required: false, description: ISO 8601}
+      chunk_size: {range: integer, required: false}
+      chunk_hashes: {range: string, required: false, multivalued: true}

@@ -1,0 +1,24 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*']}
+    nas: {role: archive, site: attic, wants: ['*']}
+- sync: all
+- {at: server, upload: photo-1, size: 2KB}
+- {at: server, upload: photo-2, size: 2KB}
+- sync: all
+- {at: laptop, command: set_blob_pin, fields: {blob_hash: $photo-2, pinned: true}}
+- {announce: {node: laptop, draining: true}}
+- sync: all
+- sweep: laptop
+# the pinned blob stays, and the drain report says honestly that it cannot finish
+- claim: {at: laptop, blob: $photo-1, has: false}
+- claim: {at: laptop, blob: $photo-2, has: true}
+- claim: {at: laptop, query: get_drain_remaining, input: {node_id: laptop},
+          expect: {equals: {held_count: 1, unsafe_count: 1}}}
+
+# a draining node is never a replication target: a photo uploaded now is not fetched by it
+- {at: server, upload: photo-3, size: 2KB}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, blob: $photo-3, has: false}
+- claim: {at: nas, blob: $photo-3, has: true}

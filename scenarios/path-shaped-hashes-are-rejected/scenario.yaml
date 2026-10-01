@@ -1,0 +1,13 @@
+- cluster:
+    server: {role: hot, site: hetzner}
+    laptop: {role: archive, site: home, wants: ['*']}
+# a "hash" must look like one before it can become a path: nothing may be put, fetched
+# or — above all — unlinked at an address the caller made up
+- {at: server, command: put_blob, expect: rejects,
+   fields: {blob_hash: /etc/hostname, byte_size: 10, collection: photos}}
+- {at: server, command: evict_blob, expect: rejects,
+   fields: {blob_hash: ../../etc/hostname, reason: pressure}}
+- {at: server, command: replicate_blob, expect: rejects,
+   fields: {blob_hash: /etc/hostname, reason: backfill}}
+- {at: server, command: put_blob, expect: rejects,
+   fields: {blob_hash: 'ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789', byte_size: 10, collection: photos}}
