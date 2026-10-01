@@ -341,6 +341,8 @@ m("idle: a surprise ends the watch", DM, "        except Exception:             
 m("idle: the device does not speed up", DM, "        daemon.fast = 1.0", "        daemon.fast = None", IDLE)
 m("idle: the verdict is not the exit status", DM, "        return daemon.idle_result[0]\n", "        return 0\n", IDLE)
 m("idle: --eject runs after a run that did not finish", CL, "    if args.eject and code == 0:", "    if args.eject:", IDLE)
+m("service: a virtualenv executable is not called out", SV, '    if ".venv" in parts or "venv" in parts:', '    if False:')
+m("service: install does not show the warning", CL, '    warning = service.exe_warning(exe)\n    if warning:\n        print(warning, file=sys.stderr)', '    pass')
 m("idle: --eject is not checked up front", CL, "        if run_eject(root, None, dry_run=True, power_off=False, say=why.append) != 0:", "        if False:", IDLE)
 m("idle: a peer is talked to without the daemon lock", DM, "            with self.lock:         # the peers client looks the peer's address up in the node's read models, and a\n                try:                # SQLAlchemy session is not thread-safe: never beside the tick, as sync_peer is not\n", "            if True:\n                try:\n", IDLE)
 m("idle: the eject goes ahead while the loop is still busy", CL, "        elif args.eject and code == 0:", "        elif False:", IDLE)

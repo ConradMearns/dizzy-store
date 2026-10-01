@@ -31,6 +31,16 @@ from pathlib import Path
 import yaml
 
 results: list[tuple[bool, str]] = []
+TOOL = "dizzy-store"           # set in main() to the INSTALLED tool
+
+
+def installed_tool() -> "str | None":
+    """The `dizzy-store` that `uv tool install` put on PATH — never a project virtualenv's copy, which is what a bare
+    `dizzy-store` resolves to when this script is started with `uv run` (and which `service install` would then write
+    into the user's real unit)."""
+    bin_dir = subprocess.run(["uv", "tool", "dir", "--bin"], capture_output=True, text=True).stdout.strip()
+    tool = Path(bin_dir) / "dizzy-store" if bin_dir else None
+    return str(tool) if tool is not None and tool.exists() else None
 
 
 def check(ok: bool, label: str, detail: str = "") -> bool:
@@ -55,7 +65,7 @@ def free_port() -> int:
 
 
 def tool(*args: str, cfg: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["dizzy-store", "--config", str(cfg), *args], capture_output=True, text=True)
+    return subprocess.run([TOOL, "--config", str(cfg), *args], capture_output=True, text=True)
 
 
 def wait_for(predicate, seconds: float, interval: float = 0.2) -> bool:
@@ -71,8 +81,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--uninstall", action="store_true", help="remove the unit template afterwards")
     args = ap.parse_args()
-    if not shutil.which("dizzy-store") or not shutil.which("systemctl"):
-        print("needs `dizzy-store` on PATH (uv tool install --editable ./store) and systemd")
+    global TOOL
+    TOOL = installed_tool() or ""
+    if not TOOL or not shutil.which("systemctl"):
+        print("needs the installed tool (uv tool install --editable ./store) and systemd")
         return 2
     work = Path(tempfile.mkdtemp(prefix="store-systest-"))
     cfg = work / "config.yaml"
@@ -88,7 +100,7 @@ def main() -> int:
 
     try:
         print("== setup")
-        unit = subprocess.run(["dizzy-store", "service", "install"], capture_output=True, text=True)
+        unit = subprocess.run([TOOL, "service", "install", "--exe", TOOL], capture_output=True, text=True)
         check(unit.returncode == 0, "the unit template installs", unit.stderr)
         write_config("1GB")
         for step in (["-d", "systest-ok", "init", "--role", "archive", "--site", "lab", "--wants", "*"],
@@ -155,7 +167,7 @@ def main() -> int:
             sc("reset-failed", f"dizzy-store@{name}.service")
         sc("unset-environment", "DIZZY_STORE_CONFIG")
         if args.uninstall:
-            subprocess.run(["dizzy-store", "service", "uninstall"], capture_output=True)
+            subprocess.run([TOOL, "service", "uninstall"], capture_output=True)
         shutil.rmtree(work, ignore_errors=True)
     failed = [label for ok, label in results if not ok]
     print(f"\n{len(results) - len(failed)}/{len(results)} checks passed")

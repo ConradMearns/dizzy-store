@@ -79,6 +79,19 @@ def default_exe() -> str:
     return str(Path(sys.argv[0]).resolve())
 
 
+def exe_warning(exe: str) -> Optional[str]:
+    """A console script inside a project virtualenv is not the installed tool: `uv sync` or rebuilding that venv would
+    break the service at its next restart, and `dizzy-store update` would not change what it runs. (It is what a bare
+    `dizzy-store` resolves to under `uv run`, which is how this gets written by accident.)"""
+    parts = Path(exe).parts
+    if ".venv" in parts or "venv" in parts:
+        return (f"warning: {exe} is inside a project virtualenv, not the installed tool — rebuilding that venv would "
+                "break the service at its next restart.\n"
+                "         install the tool (`uv tool install --editable ./store`) and run "
+                "`~/.local/bin/dizzy-store service install` (not under `uv run`).")
+    return None
+
+
 def install(exe: Optional[str] = None, env: Optional[Mapping[str, str]] = None,
             runner: Callable[..., "subprocess.CompletedProcess"] = subprocess.run) -> Path:
     exe = exe or default_exe()

@@ -5,7 +5,6 @@ import socket
 import subprocess
 import sys
 import threading
-import time
 
 import httpx
 import pytest
@@ -55,6 +54,38 @@ def test_install_writes_the_template_and_reloads_systemd(tmp_path):
         assert calls == [["systemctl", "--user", "daemon-reload"]]
     assert service.uninstall(env=env, runner=lambda *a, **k: None) is True
     assert not path.exists() and service.uninstall(env=env) is False
+
+
+def test_a_virtualenv_executable_is_called_out_as_not_the_installed_tool():
+    warning = service.exe_warning("/home/u/proj/store/.venv/bin/dizzy-store")
+    assert "project virtualenv" in warning and "service install" in warning
+    assert service.exe_warning("/home/u/.local/bin/dizzy-store") is None
+    assert service.exe_warning("/usr/local/bin/dizzy-store") is None
+
+
+def test_installing_from_a_virtualenv_still_installs_but_says_so(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(service.subprocess, "run", lambda *a, **k: None)           # no real daemon-reload from a test
+    venv_bin = tmp_path / "proj" / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    exe = venv_bin / "dizzy-store"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert cli(["service", "install", "--exe", str(exe)]) == 0
+    captured = capsys.readouterr()
+    assert "project virtualenv" in captured.err and "installed" in captured.out
+    assert f"ExecStart={exe} --device %i run" in service.user_unit_dir().joinpath(service.UNIT_NAME).read_text()
+    assert cli(["service", "print", "--exe", str(exe)]) == 0                          # `print` warns too
+    assert "project virtualenv" in capsys.readouterr().err
+
+
+def test_installing_the_real_tool_says_nothing(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(service.subprocess, "run", lambda *a, **k: None)
+    exe = tmp_path / "bin" / "dizzy-store"
+    exe.parent.mkdir()
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert cli(["service", "install", "--exe", str(exe)]) == 0
+    assert capsys.readouterr().err == ""
 
 
 def test_install_refuses_an_executable_that_is_not_there(tmp_path):

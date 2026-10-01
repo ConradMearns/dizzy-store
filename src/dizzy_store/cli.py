@@ -293,13 +293,17 @@ def cmd_update(args, root: Optional[Path]) -> int:
 
 def cmd_service(args, root: Optional[Path]) -> int:
     from . import service
-    if args.action == "print":
-        print(service.unit_text(args.exe or service.default_exe()), end="")
-        return 0
     if args.action == "uninstall":
         print("removed" if service.uninstall() else "was not installed")
         return 0
-    path = service.install(args.exe)
+    exe = args.exe or service.default_exe()
+    warning = service.exe_warning(exe)
+    if warning:
+        print(warning, file=sys.stderr)
+    if args.action == "print":
+        print(service.unit_text(exe), end="")
+        return 0
+    path = service.install(exe)
     print(f"installed {path}")
     print("run a device:   systemctl --user enable --now dizzy-store@NAME    (NAME is its entry in the config)")
     print("see it:         systemctl --user status dizzy-store@NAME     journalctl --user -u dizzy-store@NAME -f")
