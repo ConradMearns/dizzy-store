@@ -147,6 +147,30 @@ adoption costs a directory walk: names already held are not re-read. The run hol
 the device's engine until it finishes (it is hashing, rate-limited by
 `scrub_bytes_per_sec`), so a very large tree pauses that device's periodic jobs.
 
+### A big tree behind a slow link
+
+```sh
+REMOTE=user@host:/path/to/cas ROOT=~/.dizzy-store/laptop BWLIMIT=2M scripts/seed_from_remote.sh
+dizzy-store -d wd run --until-idle          # then the other devices catch up from this one
+```
+
+`scripts/seed_from_remote.sh` rsyncs a remote content-addressed tree (a server's `cas/`) into the device's
+root — read-only on the remote (nothing is deleted there), niced, capped at `BWLIMIT`, interrupted files
+resuming from `.store/tmp/rsync` — then adopts it in place, so every file is hashed against its name.
+Re-running it copies only what is new. Time it first (`DRY_RUN=1` prints the byte count): a 4 Mbit/s
+connection moves about 1.5–2 GiB an hour, so the first seed of a 30 GiB tree wants a fast connection or a night.
+
+### Checking the copies yourself
+
+The store's scrub and peer proofs are the working safety net. For a one-off "are these really the same
+bytes?" two small tools trust nothing the store says:
+
+```sh
+scripts/cold_verify.py ROOT      # every blob hashed from the DISK (page cache dropped), compared with its name
+(cd ROOT && find . -path ./.store -prune -o -type f -printf '%s %f %P\n') > laptop.txt   # a remote one: the same, over ssh
+scripts/compare_manifests.py server server.txt laptop laptop.txt wd wd.txt
+```
+
 ## What keeps data safe
 
 - A copy **counts** toward `min_sites` only if it is present, on a non-draining
