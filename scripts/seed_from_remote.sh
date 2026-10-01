@@ -26,7 +26,7 @@ mkdir -p "$TMP"
 RSYNC=(rsync -a --no-o --no-g --partial-dir="$TMP" --temp-dir="$TMP" --bwlimit="$BWLIMIT" --exclude='/tmp*' --stats
        -e "ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"
        --rsync-path="${REMOTE_RSYNC:-nice -n 19 ionice -c3 rsync}")
-[[ -t 1 ]] && RSYNC+=(--info=progress2)
+if [[ -t 1 ]]; then RSYNC+=(--info=progress2); else RSYNC+=(--out-format='%t %l %n'); fi   # unattended: one log line per file
 
 if [[ -n "${DRY_RUN:-}" ]]; then
     "${RSYNC[@]}" -n "${REMOTE%/}/" "$ROOT/"
