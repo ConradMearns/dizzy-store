@@ -434,7 +434,7 @@ class StoreNode:
                     self._execute(queued)
                 while (requester := self._next_pull_request()) is not None:
                     try:
-                        self.pull_from_peer(requester)
+                        self.service_pull_request(requester)
                     except PeerUnreachable:
                         pass                           # the requester went away again
 
@@ -475,6 +475,23 @@ class StoreNode:
 
     def pull_from_peer(self, peer_id: str) -> int:
         return self.peers.pull_from(peer_id)
+
+    def service_pull_request(self, requester: str) -> None:
+        """A peer asked this device to pull from it — the SIDE door through which another device's events can reach
+        this log (the front door is `sync_peer`, where THIS device chooses the peer). Events are merged only between
+        devices of ONE cluster, so before acting on a knock ask the knocker, live, which cluster it is in: a different
+        answer — or none, from either side — drops the request, and the address it came with, and merges nothing."""
+        mine = self.cluster_id
+        theirs = self.peers.cluster_id(requester) if mine else None
+        if not mine or theirs != mine:
+            why = ("this device has not joined a cluster" if not mine else
+                   f"it is in cluster {theirs!r} and this device is in {mine!r}" if theirs else
+                   "it has not joined a cluster")
+            self._on_progress(Progress(stage="pull_refused", detail=f"{requester} asked to be pulled from, but {why}"))
+            if hasattr(self.peers, "forget"):
+                self.peers.forget(requester)           # its address hint must not outlive its welcome
+            return
+        self.pull_from_peer(requester)
 
     # ── the edge: what the blob API does ────────────────────────────────────
 

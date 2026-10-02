@@ -245,6 +245,11 @@ class HttpPeers:
         """Remember where a peer says it can be reached (never overrides announcements)."""
         self._hints[peer_id] = list(endpoints)
 
+    def forget(self, peer_id: str) -> None:
+        """Drop what was learned about where a peer is: its hint and the last address that answered."""
+        self._hints.pop(peer_id, None)
+        self._last_good.pop(peer_id, None)
+
     def cluster_id(self, peer_id: str) -> Optional[str]:
         return self.request_json(peer_id, "GET", "/peer/cluster").get("cluster_id")
 

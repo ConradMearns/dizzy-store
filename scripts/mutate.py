@@ -344,6 +344,15 @@ m("idle: --eject runs after a run that did not finish", CL, "    if args.eject a
 JOIN = ["tests/test_join.py"]
 m("join: a store of another cluster is re-labelled", CL, "    if mine and mine != theirs:", "    if False:", JOIN)
 m("join: rejoining your own cluster is refused", CL, "    if mine and mine != theirs:", "    if mine:", JOIN)
+PULLREQ = ["tests/test_pull_requests.py"]
+m("pull-request: a knock from another cluster is serviced", ND, "        if not mine or theirs != mine:", "        if False:", PULLREQ)
+m("pull-request: a knock from a device with no cluster is serviced", ND, "        if not mine or theirs != mine:", "        if mine and theirs and theirs != mine:", PULLREQ)
+m("pull-request: every knock is refused", ND, "        if not mine or theirs != mine:", "        if True:", PULLREQ)
+m("pull-request: a refusal is not reported", ND, "            self._on_progress(Progress(stage=\"pull_refused\", detail=f\"{requester} asked to be pulled from, but {why}\"))", "            pass", PULLREQ)
+m("pull-request: a refused knock leaves its address behind", ND, "                self.peers.forget(requester)           # its address hint must not outlive its welcome", "                pass", PULLREQ)
+m("pull-request: forget leaves the hint", SRC + "peer_http.py", "        self._hints.pop(peer_id, None)\n        self._last_good.pop(peer_id, None)", "        self._last_good.pop(peer_id, None)", PULLREQ)
+m("pull-request: forget leaves the last good address", SRC + "peer_http.py", "        self._hints.pop(peer_id, None)\n        self._last_good.pop(peer_id, None)", "        self._hints.pop(peer_id, None)", PULLREQ)
+m("pull-request: a vanished knocker is an error", ND, "                    except PeerUnreachable:\n                        pass                           # the requester went away again", "                    except ZeroDivisionError:\n                        pass", PULLREQ)
 m("service: a virtualenv executable is not called out", SV, '    if ".venv" in parts or "venv" in parts:', '    if False:')
 m("service: install does not show the warning", CL, '    warning = service.exe_warning(exe)\n    if warning:\n        print(warning, file=sys.stderr)', '    pass')
 m("idle: --eject is not checked up front", CL, "        if run_eject(root, None, dry_run=True, power_off=False, say=why.append) != 0:", "        if False:", IDLE)
