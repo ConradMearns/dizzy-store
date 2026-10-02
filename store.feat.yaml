@@ -85,7 +85,8 @@ description: >-
   evicts under pressure; only a draining node evicts to drain; a 'cold' node (an
   external drive that may be unplugged tomorrow) never evicts and never counts
   as that archive. A node never evicts, under pressure, a collection it WANTS in
-  full.
+  full, nor a blob smaller than min_evict_bytes (principle 11); a draining node
+  drops what it safely can, small blobs included.
 
   8. Devices differ, and so do failure domains. A node announces its ROLE
   ('hot', 'archive', 'cold'), its SITE (where it physically lives — the laptop
@@ -100,8 +101,9 @@ description: >-
   events of each type per merge (a bulk adoption that arrives fresh is still a
   bulk), and dispatch a bounded number of commands per event. Bulk catch-up is
   the host's paced SWEEP: replicate_blob for each of get_missing_blobs, and
-  evict_blob for each of get_eviction_candidates while under pressure or
-  draining — at most max_dispatch_per_event attempts a tick, remembering what it
+  evict_blob for each of get_eviction_candidates (min_bytes = min_evict_bytes)
+  while under pressure or draining — at most max_dispatch_per_event attempts a
+  tick, remembering what it
   could not do and backing off, so one unfetchable blob never blocks the rest.
   Byte-moving procedures obey env.store's bytes-per-second limits.
 
@@ -117,7 +119,14 @@ description: >-
   what is provably held elsewhere; any node refuses to fetch what would cross
   the floor (blob_replication_failed 'out_of_space'). Pressure is a trigger, not
   a target: relief goes down to the low watermark, and a quarter of the floor
-  above it.
+  above it. What pressure may TAKE is narrower than what it counts:
+  min_evict_bytes (0 = off) exempts every blob smaller than it — they free next
+  to nothing and cost a reader a round trip to lose — and so do pinned, wanted
+  and not-proven-elsewhere blobs. An exempt blob is simply not a candidate (it
+  counts toward neither bytes_to_free nor a dispatch cap), so relief that
+  cannot be reached ends when the candidates run out; it is never retried
+  against the same blobs. A draining node ignores the exemption: leaving means
+  leaving.
 
 
   FOOTNOTES (not modeled yet)
@@ -372,7 +381,9 @@ procedures:
       EFFECT: refuse (reported to progress; no event) unless ALL hold: the
       blob is unpinned here; its collection is evictable
       (get_collection_policy) and, for reason 'pressure', not one this node
-      WANTS in full (get_node_profile); this node's role permits the reason
+      WANTS in full (get_node_profile) and not smaller than
+      env.store.min_evict_bytes (get_blob byte_size; 0 = off — a drain takes
+      small blobs too); this node's role permits the reason
       ('pressure' only for 'hot', 'drain' only while this node is draining,
       never 'cold'); and OTHER nodes' copies — per get_blob_replicas
       'present', non-draining and fresh (verified_at within
@@ -613,13 +624,15 @@ queries:
     adapter: sqla
   get_eviction_candidates:
     description: >-
-      Blobs a node may drop (input: node_id, bytes_needed, limit): its
-      'present', unpinned locations in evictable collections that OTHER non-
+      Blobs a node may drop (input: node_id, bytes_needed, limit, min_bytes):
+      its 'present', unpinned locations in evictable collections that OTHER non-
       draining nodes hold fresh and 'present' across at least min_sites
       distinct sites, including a non-draining archive. A 'hot' node gets them
       least recently TOUCHED first (last read, else when stored), skipping
-      collections it WANTS in full, stopping once bytes_needed is covered; a
-      draining node gets all of them; a 'cold' node gets none. Advisory —
+      collections it WANTS in full and blobs smaller than min_bytes (absent or
+      0 = no exemption; an exempt blob counts toward neither bytes_needed nor
+      limit), stopping once bytes_needed is covered; a draining node gets all
+      of them, small ones too; a 'cold' node gets none. Advisory —
       evict_blob re-checks live. Readers: evict_on_space_pressure and the
       host's drain sweep.
     model: pool
@@ -680,8 +693,9 @@ policies:
     description: >-
       When THIS node reports space_pressure_detected (peers' are ignored),
       dispatch evict_blob (reason 'pressure') for the get_eviction_candidates
-      that cover bytes_to_free, at most env.store.max_dispatch_per_event; the
-      next pressure reading follows if more is needed.
+      (min_bytes = env.store.min_evict_bytes) that cover bytes_to_free, at most
+      env.store.max_dispatch_per_event; the next pressure reading follows if
+      more is needed.
     event: space_pressure_detected
     queries: [get_eviction_candidates]
     environment: [store]
@@ -712,7 +726,9 @@ environment:
     (fractions of it that start and stop eviction); the pacing knobs of
     principle 9 (live_window_s, max_dispatch_per_event, max_bytes_per_sec,
     scrub_bytes_per_sec); and chunk_threshold_bytes /
-    chunk_size for the edge; and min_free_bytes (principle 11; 0 = off).
+    chunk_size for the edge; min_free_bytes (principle 11; 0 = off); and
+    min_evict_bytes (principle 11; blobs smaller than this are never evicted
+    under pressure; 0 = off).
     Injected by the host from its layered configuration.
   disk: >-
     How much room the filesystem under root has left for an ordinary (non-root)

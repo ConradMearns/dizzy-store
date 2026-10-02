@@ -1,0 +1,27 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], limit_bytes: 10KB, high_watermark: 0.8, low_watermark: 0.5,
+             min_evict_bytes: 2KB}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: "tiny-{n}", count: 4, size: 1KB}        # the OLDEST: strict age order would take these first
+- advance: 10m
+- {at: server, upload: "big-{n}", count: 3, size: 3KB}
+- sync: all
+- claim: {at: laptop, blob: $tiny-1, has: true}
+- claim: {at: laptop, blob: $big-1, has: true}
+
+# 13KB held of a 10KB limit: over the 80% watermark, free down to 50% (8KB) — only the big ones can be taken
+- {at: server, command: check_capacity}
+- claim: {at: server, blob: $big-1, has: false}
+- claim: {at: server, blob: $big-2, has: false}
+- claim: {at: server, blob: $big-3, has: false}
+- claim: {at: server, blob: $tiny-1, has: true}
+- claim: {at: server, blob: $tiny-2, has: true}
+- claim: {at: server, blob: $tiny-3, has: true}
+- claim: {at: server, blob: $tiny-4, has: true}
+- claim: {at: laptop, blob: $tiny-1, has: true}
+- claim: {at: laptop, blob: $big-3, has: true}
+
+# the exemption is the query's input, not an accident of the sizes: without it the tiny ones are the candidates
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server, min_bytes: 2048}, expect: empty}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server}, expect: {count: 4}}

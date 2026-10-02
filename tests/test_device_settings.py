@@ -91,6 +91,21 @@ def test_a_machine_says_where_it_is_and_the_drive_announces_that(tmp_path):
     assert Device.load(tmp_path / "dev").card["site"] == "home"        # and the drive itself never changed
 
 
+def test_the_small_blob_exemption_reaches_the_node_and_defaults_to_off(tmp_path):
+    d = make(tmp_path, DeviceSettings(min_evict="1MB"))
+    assert d["config"]["min_evict_bytes"] == 1024 ** 2
+    node = d.build_node()
+    try:
+        assert node.env_store.min_evict_bytes == 1024 ** 2
+    finally:
+        node.close()
+    plain = make(tmp_path / "plain").build_node()           # no setting anywhere: today's behaviour, unchanged
+    try:
+        assert plain.env_store.min_evict_bytes == 0
+    finally:
+        plain.close()
+
+
 def test_the_node_is_built_from_what_is_in_force(tmp_path):
     d = make(tmp_path, DeviceSettings(limit="2GB", min_free="500MB", endpoints=["http://new:1"]))
     node = d.build_node()

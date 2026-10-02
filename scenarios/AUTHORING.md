@@ -26,7 +26,8 @@ cluster runs to idle, then the **invariants** are checked (below).
 
 | step | meaning |
 |---|---|
-| `cluster: {name: {…}}` | Declare devices. The first founds the cluster; all announce. Keys: card — `role` (hot/archive/cold), `site`, `wants`, `location_note`, `draining`, `endpoints`; config — any `env.store` field (`limit_bytes: 10KB`, `max_dispatch_per_event`, `live_window_s`, `high_watermark`…). The filesystem under a device can be simulated: `disk_capacity: 20KB` gives it a disk that size and `disk_other: 4KB` puts someone else's data on it, so `min_free_bytes: 6KB` (the free-space floor) can be tested without filling a real one. Devices do **not** know each other until they `sync`. |
+| `cluster: {name: {…}}` | Declare devices. The first founds the cluster; all announce. Keys: card — `role` (hot/archive/cold), `site`, `wants`, `location_note`, `draining`, `endpoints`; config — any `env.store` field (`limit_bytes: 10KB`, `max_dispatch_per_event`, `live_window_s`, `high_watermark`…). The filesystem under a device can be simulated: `disk_capacity: 20KB` gives it a disk that size and `disk_other: 4KB` puts someone else's data on it, so `min_free_bytes: 6KB` (the free-space floor) can be tested without filling a real one. `min_evict_bytes: 2KB` exempts
+blobs under 2KB from eviction under pressure (not from a drain). Devices do **not** know each other until they `sync`. |
 | `{at: dev, command: name, fields: {…}}` | Dispatch a command on a device. `occurred_at` defaults to now. `expect: rejects` asserts it refuses. |
 | `{at: dev, upload: name, size: 4KB, collection: photos}` | The edge's job: write deterministic bytes under the device's root, then `put_blob`. `chunk_size: 1KB` records a chunk recipe. `upload: "p-{n}"` + `count: 12` makes many. `$name` then refers to the blob's sha256. |
 | `tree: {at: dev, dir: books, files: {a.txt: 3KB}}` | Lay plain files on disk (for `adopt_collection`); blobs are `$books/a.txt`, the directory is `$path:books`. `layout: cas` names the files by their hash (the logger's `cas/`); `truncate: [a.bin]` leaves a file holding half the bytes its name claims; `stray: [a.txt]` leaves half a file already at the device's blob address. |
@@ -65,7 +66,8 @@ except scalar queries (`get_collection_policy`, `get_peer_link`…) — use `equ
 `claims-match-bytes` (the log never lies about the disk, unless a fault was
 injected — and a repaired fault stops being exempt) · `never-last-copy` (nothing
 the system does destroys the last verified copy; damaging or wiping the SOLE
-holder is excused) · `models-converge` (equal event heads ⇒ equal read models).
+holder is excused) · `small-blobs-stay` (nothing smaller than a node's `min_evict_bytes` is ever
+evicted under pressure — a drain is exempt) · `models-converge` (equal event heads ⇒ equal read models).
 After the LAST step, once: `confluent-folds` (the same events folded in two
 different valid orders give identical read models). They are
 `dizzy_store/invariants.py`; add one there and every existing scenario is checked

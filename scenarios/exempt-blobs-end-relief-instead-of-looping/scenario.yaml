@@ -1,0 +1,23 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: [], limit_bytes: 10KB, high_watermark: 0.8, low_watermark: 0.5,
+             min_evict_bytes: 4KB}
+    laptop: {role: archive, site: home, wants: ['*']}
+- sync: all
+- {at: server, upload: "small-{n}", count: 3, size: 3KB}
+- sync: all
+
+# 9KB of a 10KB limit is over the watermark, but every blob is under 4KB: nothing may be taken
+- {at: server, command: check_capacity}
+- claim: {at: server, blob: $small-1, has: true}
+- claim: {at: server, blob: $small-2, has: true}
+- claim: {at: server, blob: $small-3, has: true}
+- sweep: server
+- sweep: server
+- {at: server, command: check_capacity}
+- sweep: server
+- claim: {at: server, blob: $small-1, has: true}
+- claim: {at: server, blob: $small-2, has: true}
+- claim: {at: server, blob: $small-3, has: true}
+- claim: {at: server, query: get_eviction_candidates, input: {node_id: server, bytes_needed: 6144, limit: 10, min_bytes: 4096},
+          expect: empty}
+- claim: {at: laptop, blob: $small-1, has: true}

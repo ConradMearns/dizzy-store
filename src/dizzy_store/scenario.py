@@ -227,7 +227,7 @@ class Runner:
             card = {k: conf.pop(k) for k in list(conf) if k in CARD_KEYS}
             disk = {k: parse_size(conf.pop(k)) for k in ("disk_capacity", "disk_other") if k in conf}
             config = {k: parse_size(v) if k in ("limit_bytes", "chunk_size", "chunk_threshold_bytes",
-                                                "min_free_bytes") else v for k, v in conf.items()}
+                                                "min_free_bytes", "min_evict_bytes") else v for k, v in conf.items()}
             if index == 0:
                 node = self.cluster.found(name, card, config)
             else:

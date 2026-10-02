@@ -79,6 +79,45 @@ def test_sizes_are_binary_and_may_be_numbers(tmp_path):
                              "chunk_size": 8 * 1024 ** 2, "high_watermark": 0.8}
 
 
+@pytest.mark.parametrize("spelled, expected", [
+    ("1MB", 1024 ** 2),                  # binary units, like every other size here
+    ("1000000", 10 ** 6),                # a string of digits is bytes
+    (1_000_000, 10 ** 6),                # so is a number: the way to say exactly a million
+    (0, 0),                              # an explicit 0 is "no exemption" — and it overrides what a lower layer said
+])
+def test_min_evict_is_a_size_like_min_free(tmp_path, spelled, expected):
+    f = write(tmp_path / "c.yaml", {"devices": {"d": {"root": "/r", "min_evict": spelled}}})
+    d = load_config(files=[f], env={}).config.devices["d"]
+    assert d.min_evict == expected and d.env_store() == {"min_evict_bytes": expected}
+
+
+def test_min_evict_also_works_in_the_raw_settings_block_and_the_named_key_wins():
+    assert DeviceSettings(settings={"min_evict_bytes": "2KB"}).env_store() == {"min_evict_bytes": 2048}
+    assert DeviceSettings(min_evict="1MB", settings={"min_evict_bytes": 5}).env_store() == {"min_evict_bytes": 1024 ** 2}
+    assert DeviceSettings().env_store() == {}                       # unset says nothing: the drive's own value stands
+
+
+def test_min_evict_layers_like_any_other_setting(tmp_path):
+    base = write(tmp_path / "base.yaml", {"defaults": {"min_evict": "1MB"}, "devices": {
+        "a": {"root": "/a"}, "b": {"root": "/b", "min_evict": "4MB"}}})
+    cfg = load_config(files=[base], env={}).config
+    assert cfg.devices["a"].merged_under(cfg.defaults).min_evict == 1024 ** 2          # inherited from `defaults`
+    assert cfg.devices["b"].merged_under(cfg.defaults).min_evict == 4 * 1024 ** 2      # its own wins
+
+
+@pytest.mark.parametrize("bad", ["lots", "-5", "1.5MB", "MB"])
+def test_a_bad_min_evict_is_a_configuration_error_not_silence(tmp_path, bad):
+    f = write(tmp_path / "c.yaml", {"devices": {"d": {"root": "/r", "min_evict": bad}}})
+    with pytest.raises(ConfigError, match="min_evict"):
+        load_config(files=[f], env={})
+
+
+def test_a_misspelled_min_evict_is_rejected(tmp_path):
+    f = write(tmp_path / "c.yaml", {"devices": {"d": {"root": "/r", "min_evicts": "1MB"}}})
+    with pytest.raises(ConfigError, match="min_evicts"):
+        load_config(files=[f], env={})
+
+
 def test_named_settings_beat_the_raw_settings_block():
     d = DeviceSettings(limit="1GB", settings={"limit_bytes": 5})
     assert d.env_store()["limit_bytes"] == GiB
@@ -127,6 +166,7 @@ def test_the_template_is_valid_against_the_schema():
     assert set(doc["devices"]) == {"laptop"}                       # a portable drive needs no entry at all
     cfg = StoreConfig.model_validate(doc)
     assert cfg.devices["laptop"].limit == 100 * GiB and cfg.devices["laptop"].min_free == 20 * GiB
+    assert cfg.devices["laptop"].min_evict == 1024 ** 2          # the shipped example is the exemption's spelling
     assert cfg.defaults.site == "home" and cfg.defaults.intervals["sync_s"] == 30
 
 

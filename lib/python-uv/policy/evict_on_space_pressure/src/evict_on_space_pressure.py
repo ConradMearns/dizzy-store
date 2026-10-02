@@ -18,7 +18,7 @@ def evict_on_space_pressure(
         return                                   # a peer's pressure is not mine to relieve
     candidates = context.query.get_eviction_candidates(GetEvictionCandidatesInput(
         node_id=store.node_id, bytes_needed=event.bytes_to_free,
-        limit=store.max_dispatch_per_event))
+        limit=store.max_dispatch_per_event, min_bytes=store.min_evict_bytes))
     for blob_hash in candidates.blob_hashes[: store.max_dispatch_per_event]:
         context.emit.evict_blob(EvictBlob(
             blob_hash=blob_hash, reason="pressure", occurred_at=now_utc()))

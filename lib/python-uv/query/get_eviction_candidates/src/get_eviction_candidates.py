@@ -1,5 +1,8 @@
 # Blobs a node may drop (advisory — evict_blob re-checks, and PROVES live). Only a
 # 'hot' node under pressure, or any non-cold draining node, ever has candidates.
+# Under pressure a blob smaller than input.min_bytes (env.store.min_evict_bytes) is
+# skipped BEFORE it can count toward bytes_needed or limit, so an exempt blob can
+# neither inflate coverage nor starve the rest; a drain takes small blobs too.
 from gen_int.python.query.get_eviction_candidates import get_eviction_candidates_query, get_eviction_candidates_context
 from gen_def.pydantic.query.get_eviction_candidates import GetEvictionCandidatesInput, GetEvictionCandidatesOutput
 from gen_def.sqla.models.pool import Blob, BlobLocation, Node
@@ -33,6 +36,8 @@ def get_eviction_candidates(input: GetEvictionCandidatesInput, context: get_evic
             continue
         if not me.draining and ("*" in wants or blob.collection in wants):
             continue                      # under pressure, never drop what this node WANTS in full
+        if not me.draining and blob.byte_size < (input.min_bytes or 0):
+            continue                      # ... nor a small blob (min_evict_bytes); a drain takes those too
         ok, _sites, _anchor = index.safe_to_drop(me.node_id, blob.blob_hash, blob.collection, now)
         if ok:
             out.append(blob)

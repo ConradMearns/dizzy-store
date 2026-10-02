@@ -90,7 +90,7 @@ linkml_meta = LinkMLMeta({'default_prefix': 'https://example.org/environment/',
 
 class Store(ConfiguredBaseModel):
     """
-    This node's config: node_id (stable, unique in the pool); cluster_id (unset until it founds or joins one); epoch (random, generated once when the device's state is created — a wiped device gets a new one); root (the sharded <aa>/<bb>/<sha256> blob tree — on the server, the EXISTING cas/); state_dir (<root>/.store/: identity, log, config — what makes the device portable); tmp_dir and quarantine_dir (same filesystem as root, for staging and atomic moves); limit_bytes with high_watermark / low_watermark (fractions of it that start and stop eviction); the pacing knobs of principle 9 (live_window_s, max_dispatch_per_event, max_bytes_per_sec, scrub_bytes_per_sec); and chunk_threshold_bytes / chunk_size for the edge; and min_free_bytes (principle 11; 0 = off). Injected by the host from its layered configuration.
+    This node's config: node_id (stable, unique in the pool); cluster_id (unset until it founds or joins one); epoch (random, generated once when the device's state is created — a wiped device gets a new one); root (the sharded <aa>/<bb>/<sha256> blob tree — on the server, the EXISTING cas/); state_dir (<root>/.store/: identity, log — what makes the device portable); tmp_dir and quarantine_dir (same filesystem as root, for staging and atomic moves); limit_bytes with high_watermark / low_watermark (fractions of it that start and stop eviction); the pacing knobs of principle 9 (live_window_s, max_dispatch_per_event, max_bytes_per_sec, scrub_bytes_per_sec); and chunk_threshold_bytes / chunk_size for the edge; min_free_bytes (principle 11; 0 = off); and min_evict_bytes (principle 11; blobs smaller than this are never evicted under pressure; 0 = off). Injected by the host from its layered configuration.
     """
     linkml_meta: ClassVar[LinkMLMeta] = LinkMLMeta({'from_schema': 'https://example.org/environment'})
 
@@ -111,6 +111,7 @@ class Store(ConfiguredBaseModel):
     chunk_threshold_bytes: int = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['store']} })
     chunk_size: int = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['store']} })
     min_free_bytes: Optional[int] = Field(default=None, description="""the filesystem must keep this much free; absent or 0 = off""", json_schema_extra = { "linkml_meta": {'domain_of': ['store']} })
+    min_evict_bytes: Optional[int] = Field(default=None, description="""blobs smaller than this are never evicted under pressure; absent or 0 = off""", json_schema_extra = { "linkml_meta": {'domain_of': ['store']} })
 
 
 class Disk(ConfiguredBaseModel):

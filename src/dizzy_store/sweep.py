@@ -89,7 +89,8 @@ def sweep(node, cap: int | None = None) -> dict[str, int]:
         reason = "drain" if me.draining else "pressure"
         backed = sum(1 for kind, _h in memory if kind == "evict")
         candidates = node.query("get_eviction_candidates", node_id=node.name,
-                                bytes_needed=to_free, limit=cap * 8 + backed)
+                                bytes_needed=to_free, limit=cap * 8 + backed,
+                                min_bytes=store.min_evict_bytes)
         tried = 0
         for blob_hash in candidates.blob_hashes or []:
             if tried >= cap:

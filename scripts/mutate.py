@@ -24,7 +24,7 @@ PY = str(STORE / ".venv/bin/python") if (STORE / ".venv/bin/python").exists() el
 FAST = ["tests/test_scenarios.py", "tests/test_wiring.py", "tests/test_storeutil.py",
         "tests/test_recovery.py", "tests/test_fetch.py", "tests/test_projections.py",
         "tests/test_adopt_put.py", "tests/test_scrub.py", "tests/test_sweep.py",
-        "tests/test_transport_units.py", "tests/test_guards.py", "tests/test_floor.py",
+        "tests/test_transport_units.py", "tests/test_guards.py", "tests/test_floor.py", "tests/test_min_evict.py",
         "tests/test_config.py", "tests/test_device_settings.py", "tests/test_cli_config.py",
         "tests/test_fingerprint.py", "tests/test_service.py", "tests/test_reload.py",
         "tests/test_doctor.py", "tests/test_eject.py", "tests/test_volumes.py", "tests/test_tool.py",
@@ -216,6 +216,28 @@ m("floor: uploads ignore the floor", ND, "        if floor > 0 and self.disk.fre
 m("floor: check_capacity ignores the disk", LIB + "procedure/check_capacity/src/check_capacity.py", "    free = context.env.disk.free_bytes()", "    free = 10 ** 18")
 m("floor: the sweep ignores the floor", SW, "    pressure = capacity_pressure(usage.held_bytes, node.disk.free_bytes(), store)", "    pressure = capacity_pressure(usage.held_bytes, 10 ** 18, store)")
 m("floor: statvfs counts root's reserve", SU, "    return st.f_bavail * st.f_frsize", "    return st.f_bfree * st.f_frsize")
+
+# ── min_evict_bytes: small blobs stay under pressure (a drain still takes them)
+POL = LIB + "policy/evict_on_space_pressure/src/evict_on_space_pressure.py"
+INV = "src/dizzy_store/invariants.py"
+SC = "src/dizzy_store/scenario.py"
+m("min_evict: candidates ignore the exemption", GEC, "        if not me.draining and blob.byte_size < (input.min_bytes or 0):\n            continue                      # ... nor a small blob (min_evict_bytes); a drain takes those too\n", "")
+m("min_evict: candidates exempt a blob of exactly min_bytes", GEC, "blob.byte_size < (input.min_bytes or 0)", "blob.byte_size <= (input.min_bytes or 0)")
+m("min_evict: a drain honours the exemption in the candidates", GEC, "        if not me.draining and blob.byte_size < (input.min_bytes or 0):", "        if blob.byte_size < (input.min_bytes or 0):")
+m("min_evict: exempt blobs still count toward bytes_needed", GEC, "        if not me.draining and blob.byte_size < (input.min_bytes or 0):\n            continue", "        if not me.draining and blob.byte_size < (input.min_bytes or 0):\n            covered += blob.byte_size\n            continue")
+m("min_evict: evict_blob ignores the exemption (asked by hand)", EV, '    if command.reason == "pressure" and (blob.byte_size or 0) < smallest:\n        return refuse(f"{blob.byte_size} bytes is under min_evict_bytes ({smallest}): small blobs stay")\n', "")
+m("min_evict: evict_blob exempts a blob of exactly min_evict_bytes", EV, '(blob.byte_size or 0) < smallest', '(blob.byte_size or 0) <= smallest')
+m("min_evict: evict_blob applies the exemption to a drain", EV, 'if command.reason == "pressure" and (blob.byte_size or 0) < smallest:', 'if (blob.byte_size or 0) < smallest:')
+m("min_evict: the sweep does not pass the exemption", SW, "                                bytes_needed=to_free, limit=cap * 8 + backed,\n                                min_bytes=store.min_evict_bytes)\n", "                                bytes_needed=to_free, limit=cap * 8 + backed)\n")
+m("min_evict: the pressure policy does not pass the exemption", POL, "        limit=store.max_dispatch_per_event, min_bytes=store.min_evict_bytes))", "        limit=store.max_dispatch_per_event))")
+m("min_evict: a raw min_evict_bytes is not read as a size", CFG, 'SIZE_KEYS = {"limit_bytes", "min_free_bytes", "min_evict_bytes", "chunk_threshold_bytes", "chunk_size",', 'SIZE_KEYS = {"limit_bytes", "min_free_bytes", "chunk_threshold_bytes", "chunk_size",')
+m("min_evict: the named setting never reaches env.store", CFG, '        if self.min_evict is not None:\n            out["min_evict_bytes"] = self.min_evict\n', "")
+m("min_evict: an explicit 0 is ignored", CFG, "        if self.min_evict is not None:", "        if self.min_evict:")
+m("min_evict: no default (a removed setting stays in force)", ND, "min_free_bytes=0, min_evict_bytes=0,", "min_free_bytes=0,")
+m("min_evict: scenarios cannot spell the size", SC, '"min_free_bytes", "min_evict_bytes") else v', '"min_free_bytes") else v')
+m("min_evict: the invariant is not registered", INV, '    "small-blobs-stay": small_blobs_stay_under_pressure,\n', "")
+m("min_evict: the invariant flags a drain", INV, '                    or payload.get("reason") != "pressure"):', '                    or False):')
+m("min_evict: the invariant forgives everything", INV, "            if blob is not None and blob.byte_size < smallest:", "            if False:")
 
 # ── configuration: layering, resolution, the split between drive and machine
 m("config: earlier files win", CFG, "            merged = _deep_merge(merged, _read(path))", "            merged = _deep_merge(_read(path), merged)")

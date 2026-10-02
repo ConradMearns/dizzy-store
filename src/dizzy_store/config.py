@@ -30,7 +30,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, ValidationError
 from storeutil import parse_size
 
 # env.store fields that are byte counts: accept "100GB" as well as 107374182400
-SIZE_KEYS = {"limit_bytes", "min_free_bytes", "chunk_threshold_bytes", "chunk_size",
+SIZE_KEYS = {"limit_bytes", "min_free_bytes", "min_evict_bytes", "chunk_threshold_bytes", "chunk_size",
              "max_bytes_per_sec", "scrub_bytes_per_sec", "scrub_budget_bytes"}
 
 Size = Annotated[int, BeforeValidator(parse_size)]
@@ -70,6 +70,7 @@ CONFIG_TEMPLATE = """\
 #     seeds: {server: http://127.0.0.1:7702}   # peers to bootstrap from
 #     limit: 100GB                         # the most this device may hold in blobs
 #     min_free: 20GB                       # the filesystem must always keep this much free
+#     min_evict: 1MB                       # never evict a blob smaller than this under pressure (a drain still does)
 #     settings: {high_watermark: 0.9}      # any other env.store field (advanced)
 # A PORTABLE drive needs no entry here: its name, role, limits and identity live on the drive, and
 # `dizzy-store -d NAME` (or standing in/beside its dizzy-store folder) finds it wherever it is mounted.
@@ -102,6 +103,7 @@ class DeviceSettings(_Strict):
     seeds: Optional[dict[str, str]] = None
     limit: Optional[Size] = None
     min_free: Optional[Size] = None
+    min_evict: Optional[Size] = None        # blobs smaller than this are never evicted under pressure
     intervals: Optional[dict[str, Any]] = None
     pacing: Optional[Pacing] = None
     settings: Optional[dict[str, Any]] = None
@@ -113,6 +115,8 @@ class DeviceSettings(_Strict):
             out["limit_bytes"] = self.limit
         if self.min_free is not None:
             out["min_free_bytes"] = self.min_free
+        if self.min_evict is not None:
+            out["min_evict_bytes"] = self.min_evict
         if self.pacing:
             for key in ("max_bytes_per_sec", "scrub_bytes_per_sec"):
                 if getattr(self.pacing, key) is not None:

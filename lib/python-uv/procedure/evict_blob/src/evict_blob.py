@@ -56,6 +56,9 @@ def evict_blob(
     wants = list(me.wants or [])
     if command.reason == "pressure" and ("*" in wants or blob.collection in wants):
         return refuse("this node wants that collection in full")
+    smallest = store.min_evict_bytes or 0           # small blobs stay under pressure; a drain takes them too
+    if command.reason == "pressure" and (blob.byte_size or 0) < smallest:
+        return refuse(f"{blob.byte_size} bytes is under min_evict_bytes ({smallest}): small blobs stay")
 
     # candidates by the LOG: the same definition of "a copy that counts" the queries use
     window = Policy(policy.min_sites, policy.verify_max_age_days)

@@ -59,6 +59,28 @@ def never_last_copy(run) -> list[str]:
     return out
 
 
+def small_blobs_stay_under_pressure(run) -> list[str]:
+    """min_evict_bytes (principle 11) as a law: a node never evicted a blob smaller than its threshold UNDER
+    PRESSURE — however the eviction was asked for (the policy, the sweep, a hand-issued command). A drain is
+    exempt from the exemption: a node that is leaving empties itself. A scenario fixes its config when it
+    declares the cluster, so a node's threshold now is the threshold it had when it evicted."""
+    out = []
+    for node in run.cluster.nodes.values():
+        smallest = node.env_store.min_evict_bytes or 0
+        if not smallest:
+            continue
+        for envelope in node.store.iterate():
+            payload = envelope.payload
+            if (envelope.type != "blob_evicted" or payload.get("node_id") != node.name
+                    or payload.get("reason") != "pressure"):
+                continue
+            blob = node.session.query(pool_models.Blob).filter_by(blob_hash=payload["blob_hash"]).first()
+            if blob is not None and blob.byte_size < smallest:
+                out.append(f"{node.name} evicted {payload['blob_hash'][:12]} ({blob.byte_size} bytes) under "
+                           f"pressure, under its min_evict_bytes of {smallest}")
+    return out
+
+
 def models_converge(run) -> list[str]:
     """Equal event heads imply equal read models (principle 3: folds converge)."""
     out = []
@@ -164,5 +186,6 @@ FINAL_REGISTRY: dict[str, Invariant] = {
 REGISTRY: dict[str, Invariant] = {
     "claims-match-bytes": claims_match_bytes,
     "never-last-copy": never_last_copy,
+    "small-blobs-stay": small_blobs_stay_under_pressure,
     "models-converge": models_converge,
 }

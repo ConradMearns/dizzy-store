@@ -1,0 +1,22 @@
+- cluster:
+    server: {role: hot, site: hetzner, wants: []}
+    laptop: {role: archive, site: home, wants: ['*'], min_evict_bytes: 2KB}
+    nas: {role: archive, site: attic, wants: ['*']}
+- sync: all
+- {at: server, upload: tiny, size: 1KB}
+- {at: server, upload: big, size: 3KB}
+- sync: all
+- claim: {at: laptop, blob: $tiny, has: true}
+- claim: {at: laptop, blob: $big, has: true}
+- claim: {at: nas, blob: $tiny, has: true}
+
+# the laptop is being retired, with a 2KB exemption configured: it still gives up everything
+- announce: {node: laptop, draining: true}
+- sync: all
+- sweep: laptop
+- claim: {at: laptop, query: get_drain_remaining, input: {node_id: laptop},
+          expect: {equals: {held_count: 0, unsafe_count: 0}}}
+- claim: {at: laptop, blob: $tiny, has: false}
+- claim: {at: laptop, blob: $big, has: false}
+- claim: {at: nas, blob: $tiny, has: true}
+- claim: {at: nas, blob: $big, has: true}

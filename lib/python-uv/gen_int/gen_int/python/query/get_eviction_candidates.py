@@ -12,7 +12,7 @@ class get_eviction_candidates_context:
 
 
 class get_eviction_candidates_query(Protocol):
-    """Blobs a node may drop (input: node_id, bytes_needed, limit): its 'present', unpinned locations in evictable collections that OTHER non- draining nodes hold fresh and 'present' across at least min_sites distinct sites, including a non-draining archive. A 'hot' node gets them least recently TOUCHED first (last read, else when stored), skipping collections it WANTS in full, stopping once bytes_needed is covered; a draining node gets all of them; a 'cold' node gets none. Advisory — evict_blob re-checks live. Readers: evict_on_space_pressure and the host's drain sweep."""
+    """Blobs a node may drop (input: node_id, bytes_needed, limit, min_bytes): its 'present', unpinned locations in evictable collections that OTHER non- draining nodes hold fresh and 'present' across at least min_sites distinct sites, including a non-draining archive. A 'hot' node gets them least recently TOUCHED first (last read, else when stored), skipping collections it WANTS in full and blobs smaller than min_bytes (absent or 0 = no exemption; an exempt blob counts toward neither bytes_needed nor limit), stopping once bytes_needed is covered; a draining node gets all of them, small ones too; a 'cold' node gets none. Advisory — evict_blob re-checks live. Readers: evict_on_space_pressure and the host's drain sweep."""
 
     def __call__(
         self, input: GetEvictionCandidatesInput, context: get_eviction_candidates_context

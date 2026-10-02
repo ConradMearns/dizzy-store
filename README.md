@@ -38,7 +38,15 @@ devices:
     listen: 127.0.0.1:7701
     limit: 100GB          # the most this device may hold in blobs
     min_free: 20GB        # the filesystem must always keep this much free (the store is rarely the only writer)
+    min_evict: 1MB        # a hot device never evicts a blob smaller than this under pressure (0 / absent = no exemption)
 ```
+
+`limit` and `min_free` say *when* a hot device starts freeing space (past the high watermark, or under the floor);
+`min_evict` says what pressure may not take: tiny blobs free next to nothing and cost a reader a round trip to lose, so
+they stay, and the rest still goes least recently touched first. Sizes are binary — `1MB` is 1,048,576 bytes; write
+`1000000` for exactly a million. The exemption is for pressure only: a device that is *draining* still empties itself.
+If everything left to evict is exempt, relief simply ends — nothing is attempted, refused or retried. A SIGHUP
+(`systemctl --user reload dizzy-store@NAME`) applies a changed value to a running device.
 
 A portable drive needs no entry here — see [A portable drive](#a-portable-drive).
 
@@ -189,7 +197,9 @@ scripts/compare_manifests.py server server.txt laptop laptop.txt wd wd.txt
   (stored, or covered by a scrub pass measured from the pass's *start*).
 - A device drops its own copy only after **asking** other devices to prove theirs:
   each peer re-hashes its file and reports its own live role and draining state.
-  The log's claim is not proof, and neither is a matching file size.
+  The log's claim is not proof, and neither is a matching file size. Under pressure it
+  also never drops a pinned blob, a collection it wants in full, or a blob smaller than
+  `min_evict`.
 - Reads that name a "hash" accept only a lowercase sha256, so nothing can be put,
   fetched or unlinked at a path a caller made up.
 - The log is the truth; read models are a fold of it. A start that finds the

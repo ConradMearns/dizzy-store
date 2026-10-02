@@ -53,6 +53,16 @@ def test_limits_the_floor_and_pacing_change_live(rig):
     assert {"limit_bytes=5368709120", "min_free_bytes=2147483648"} <= set(changed)
 
 
+def test_the_small_blob_exemption_changes_live_and_returns_to_off(rig):
+    daemon, state = rig
+    state["settings"] = DeviceSettings(min_evict="1MB")
+    changed = daemon.reload()
+    assert daemon.node.env_store.min_evict_bytes == 1024 ** 2 and "min_evict_bytes=1048576" in changed
+    state["settings"] = DeviceSettings()
+    daemon.reload()
+    assert daemon.node.env_store.min_evict_bytes == 0                # no exemption: the default
+
+
 def test_a_setting_taken_out_of_the_file_returns_to_what_the_drive_says(rig):
     daemon, state = rig
     state["settings"] = DeviceSettings(limit="5GB", min_free="2GB")

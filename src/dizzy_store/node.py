@@ -46,7 +46,7 @@ from storeutil import (NotAStore, OutOfSpace, PeerUnreachable, RootVanished, blo
 DEFAULT_CONFIG = dict(
     limit_bytes=10**9, high_watermark=0.9, low_watermark=0.7,
     live_window_s=3600, max_dispatch_per_event=10,
-    max_bytes_per_sec=0, scrub_bytes_per_sec=0, min_free_bytes=0,
+    max_bytes_per_sec=0, scrub_bytes_per_sec=0, min_free_bytes=0, min_evict_bytes=0,
     chunk_threshold_bytes=64 * 1024 * 1024, chunk_size=16 * 1024 * 1024)
 
 DEFAULT_CARD = dict(role="archive", site="home", wants=["*"], location_note=None,

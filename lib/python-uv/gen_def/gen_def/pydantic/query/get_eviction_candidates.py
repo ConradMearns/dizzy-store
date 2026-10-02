@@ -80,16 +80,19 @@ class LinkMLMeta(RootModel):
 
 linkml_meta = LinkMLMeta({'default_prefix': 'https://example.org/queries/get_eviction_candidates/',
      'default_range': 'string',
-     'description': 'Blobs a node may drop (input: node_id, bytes_needed, limit): '
-                    "its 'present', unpinned locations in evictable collections "
-                    "that OTHER non- draining nodes hold fresh and 'present' "
-                    'across at least min_sites distinct sites, including a '
-                    "non-draining archive. A 'hot' node gets them least recently "
+     'description': 'Blobs a node may drop (input: node_id, bytes_needed, limit, '
+                    "min_bytes): its 'present', unpinned locations in evictable "
+                    'collections that OTHER non- draining nodes hold fresh and '
+                    "'present' across at least min_sites distinct sites, including "
+                    "a non-draining archive. A 'hot' node gets them least recently "
                     'TOUCHED first (last read, else when stored), skipping '
-                    'collections it WANTS in full, stopping once bytes_needed is '
-                    "covered; a draining node gets all of them; a 'cold' node gets "
-                    'none. Advisory — evict_blob re-checks live. Readers: '
-                    "evict_on_space_pressure and the host's drain sweep.",
+                    'collections it WANTS in full and blobs smaller than min_bytes '
+                    '(absent or 0 = no exemption; an exempt blob counts toward '
+                    'neither bytes_needed nor limit), stopping once bytes_needed '
+                    'is covered; a draining node gets all of them, small ones too; '
+                    "a 'cold' node gets none. Advisory — evict_blob re-checks "
+                    "live. Readers: evict_on_space_pressure and the host's drain "
+                    'sweep.',
      'id': 'https://example.org/queries/get_eviction_candidates',
      'imports': ['linkml:types'],
      'name': 'get_eviction_candidates',
@@ -107,6 +110,7 @@ class GetEvictionCandidatesInput(ConfiguredBaseModel):
     node_id: str = Field(default=..., json_schema_extra = { "linkml_meta": {'domain_of': ['GetEvictionCandidatesInput']} })
     bytes_needed: Optional[int] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['GetEvictionCandidatesInput']} })
     limit: Optional[int] = Field(default=None, json_schema_extra = { "linkml_meta": {'domain_of': ['GetEvictionCandidatesInput']} })
+    min_bytes: Optional[int] = Field(default=None, description="""blobs smaller than this are never candidates (a draining node ignores it); absent or 0 = none""", json_schema_extra = { "linkml_meta": {'domain_of': ['GetEvictionCandidatesInput']} })
 
 
 class GetEvictionCandidatesOutput(ConfiguredBaseModel):

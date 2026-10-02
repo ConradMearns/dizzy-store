@@ -79,6 +79,14 @@ def test_the_global_config_flag_and_inits_own_config_flag_coexist(tmp_path):
     assert stored["high_watermark"] == 0.8 and stored["chunk_size"] == 4 * 1024 ** 2
 
 
+def test_init_stores_min_evict_bytes_as_a_number(tmp_path):
+    cfg = config_for(tmp_path, d={"root": str(tmp_path / "d"), "limit": "1GB"})
+    (tmp_path / "d").mkdir()
+    assert cli(["--config", cfg, "-d", "d", "init", "--role", "hot", "--site", "h", "--wants", "",
+                "--config", "min_evict_bytes=1MB"]) == 0
+    assert Device.load(tmp_path / "d").data["config"]["min_evict_bytes"] == 1024 ** 2
+
+
 def test_an_unknown_device_is_a_configuration_error(tmp_path, capsys):
     cfg = config_for(tmp_path, laptop={"root": str(tmp_path / "l")})
     assert cli(["--config", cfg, "-d", "nope", "status"]) == EX_CONFIG
@@ -101,6 +109,15 @@ def test_config_prints_a_template_and_shows_what_is_in_force(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "read" in out and cfg in out and "limit: 107374182400" in out
     assert f"a command run here would act on: 'laptop' at {tmp_path / 'l'}" in out
+
+
+def test_config_shows_and_advertises_the_small_blob_exemption(tmp_path, capsys):
+    assert cli(["config"]) == 0
+    template = capsys.readouterr().out
+    assert "min_evict: 1MB" in template and "never evict a blob smaller than this" in template
+    cfg = config_for(tmp_path, srv={"root": str(tmp_path / "s"), "limit": "10GB", "min_evict": "1MB"})
+    assert cli(["--config", cfg, "config", "--show"]) == 0
+    assert f"min_evict: {1024 ** 2}" in capsys.readouterr().out                 # in force, as a plain number of bytes
 
 
 def test_version_says_what_is_running(capsys):
